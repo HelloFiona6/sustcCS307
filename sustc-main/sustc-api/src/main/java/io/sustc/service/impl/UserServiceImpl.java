@@ -23,8 +23,8 @@ public class UserServiceImpl implements UserService {
         if (req.getPassword() == null || req.getName() == null || req.getSex() == null) {
             return -1L;
         }
-        int a = req.getBirthday().indexOf("ÔÂ");
-        int b = req.getBirthday().indexOf("ÈÕ");
+        int a = req.getBirthday().indexOf("æœˆ");
+        int b = req.getBirthday().indexOf("æ—¥");
         if (a == -1 || b == -1 || a >= b) return -1;
         String month = req.getBirthday().substring(0, a);
         String day = req.getBirthday().substring(a + 1, b);
@@ -92,7 +92,7 @@ public class UserServiceImpl implements UserService {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-        return MaxMid+1;
+        return MaxMid + 1;
     }
 
 
@@ -146,7 +146,7 @@ public class UserServiceImpl implements UserService {
         // auth is invalid
         if (validAuth(auth)) return false;
 
-        String sqlOfNumberOfMid = "select count(*) as count from follow where follower_mid = ? and followee_mid = ?";
+        String sqlOfNumberOfMid = "select count(*) as count from follow where follower_mid = ? and following_mid = ?";
         int numberOfBoth = 0;
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sqlOfNumberOfMid)) {
@@ -397,29 +397,69 @@ public class UserServiceImpl implements UserService {
     }
 
     public boolean validAuth(AuthInfo auth) {
-        // auth is invalid
-        String sqlOfWechatAndQQ = "select count(*) as count from users where Wechat= ? or QQ=?";
+        if ((auth.getQq() == null || auth.getQq().isEmpty()) && (auth.getWechat() == null || auth.getWechat().isEmpty()) && (auth.getPassword() == null || auth.getPassword().isEmpty()))
+            return false;
+        //valid of mid
+        boolean validOfMid = false;
+        boolean validOfQQ = false;
+        boolean validOfWechat = false;
         int numberOfMid = 0;
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sqlOfWechatAndQQ)) {
-            stmt.setString(1, auth.getWechat());
-            stmt.setString(2, auth.getQq());
-            ResultSet resultSet = stmt.executeQuery(sqlOfWechatAndQQ);
-            if (resultSet.next()) {
-                numberOfMid = resultSet.getInt("count");
+        int numberOfQQ = 0;
+        int numberOfWechat = 0;
+        if (auth.getPassword() != null && !auth.getPassword().isEmpty()) {
+            String sqlOfValidOfMid = "select count(*) as count from users where mid= ? and password = ?";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sqlOfValidOfMid)) {
+                stmt.setLong(1, auth.getMid());
+                stmt.setString(2, auth.getPassword());
+                ResultSet resultSet = stmt.executeQuery();
+                if (resultSet.next()) {
+                    numberOfMid = resultSet.getInt("count");
+                }
+                stmt.executeUpdate();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
             }
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-        if (auth.getWechat() != null && auth.getQq() != null) {
-            return numberOfMid != 1;
+            validOfMid = numberOfMid == 1;
         }
 
-        if (existMid(auth.getMid()) && (auth.getQq() == null || !existQQ(auth.getQq())) && (auth.getWechat() == null || !existWechat(auth.getWechat()))) {
-            return true;
+
+        //QQ is valid
+        if (auth.getQq() != null && !auth.getQq().isEmpty()) {
+            String sqlOfQQ = "select count(*) as count from users where mid= ? and QQ = ? ";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sqlOfQQ)) {
+                stmt.setLong(1, auth.getMid());
+                stmt.setString(2, auth.getQq());
+                ResultSet resultSet = stmt.executeQuery();
+                if (resultSet.next()) {
+                    numberOfQQ = resultSet.getInt("count");
+                }
+                stmt.executeUpdate();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            validOfQQ = numberOfQQ == 1;
         }
-        return false;
+
+        //wechat is valid
+        if (auth.getWechat() != null && !auth.getWechat().isEmpty()) {
+            String sqlOfWechat = "select count(*) as count from users where mid= ? and Wechat = ? ";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sqlOfWechat)) {
+                stmt.setLong(1, auth.getMid());
+                stmt.setString(2, auth.getWechat());
+                ResultSet resultSet = stmt.executeQuery();
+                if (resultSet.next()) {
+                    numberOfWechat = resultSet.getInt("count");
+                }
+                stmt.executeUpdate();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            validOfWechat = numberOfWechat == 1;
+        }
+        return validOfMid || validOfQQ || validOfWechat;
     }
 
 }
