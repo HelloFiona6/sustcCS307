@@ -67,6 +67,7 @@ public class VideoServiceImpl implements VideoService {
         return bv;
     }
 
+    // todo reviewer is null, which conflicts with the foreign key
     private void importVideoRecord(VideoRecord videoRecord) {
         String videoSql = "INSERT INTO video (bv, title, owner_mid, owner_name, commit_time, review_time, public_time, duration, description, reviewer_mid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection conn = dataSource.getConnection()) {
@@ -91,86 +92,105 @@ public class VideoServiceImpl implements VideoService {
         }
     }
 
+    /**
+     *   <li>the {@code auth} is invalid
+     *     <ul>
+     *       <li>both {@code qq} and {@code wechat} are non-empty while they do not correspond to same user</li>
+     *       <li>{@code mid} is invalid while {@code qq} and {@code wechat} are both invalid (empty or not found)</li>
+     *     </ul>
+     *   </li>
+     * If any of the corner case happened, {@code false} shall be returned.
+     */
     private boolean isValidAuth(AuthInfo auth) {
-        // both qq and Wechat are non-empty while they do not correspond to same user
-        if (auth.getQq()==null && auth.getWechat()==null) return false;
-        // mid is invalid while qq and wechat are both invalid (empty or not found)
-        String sqlOfWechatAndQQ = "select count(*) as count from users where Wechat= ? or QQ=?";
+        boolean validOfMid = false;
+        boolean validOfQQ = false;
+        boolean validOfWechat = false;
         int numberOfMid = 0;
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sqlOfWechatAndQQ)) {
-            stmt.setString(1, auth.getWechat());
-            stmt.setString(2, auth.getQq());
-            ResultSet resultSet = stmt.executeQuery(sqlOfWechatAndQQ);
-            if (resultSet.next()) {
-                numberOfMid = resultSet.getInt("count");
+        int numberOfQQ = 0;
+        int numberOfWechat = 0;
+        if (auth.getPassword() != null) {
+            String sqlOfValidOfMid = "select count(*) as count from users where mid= ? and password = ?";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sqlOfValidOfMid)) {
+                stmt.setLong(1, auth.getMid());
+                stmt.setString(2, auth.getPassword());
+                ResultSet resultSet = stmt.executeQuery();
+                if (resultSet.next()) {
+                    numberOfMid = resultSet.getInt("count");
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
             }
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+            validOfMid = numberOfMid == 1;
+            if (numberOfMid != 1) return false;
         }
-        if (auth.getWechat() != null && auth.getQq() != null) {
-            return numberOfMid != 1;
-        }
+        //QQ is valid
+        if (auth.getQq() != null) {
+            String sqlOfQQ = "select count(*) as count from users where QQ = ? ";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sqlOfQQ)) {
+                stmt.setString(1, auth.getQq());
+                ResultSet resultSet = stmt.executeQuery();
+                if (resultSet.next()) {
+                    numberOfQQ = resultSet.getInt("count");
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            validOfQQ = numberOfQQ == 1;
 
-        if (existMid(auth.getMid()) && (auth.getQq() == null || !existQQ(auth.getQq())) && (auth.getWechat() == null || !existWechat(auth.getWechat()))) {
-            return true;
-        }
-        return false;
-    }
-    private boolean existMid(long mid) {
-        String sqlOfMid = "select count(*) as count from users where mid= ?";
-        int numberOfMid = 0;
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sqlOfMid)) {
-            stmt.setLong(1, mid);
-            ResultSet resultSet = stmt.executeQuery(sqlOfMid);
-            if (resultSet.next()) {
-                numberOfMid = resultSet.getInt("count");
+            if (validOfQQ) {
+                String sqlOfMid = "select mid as mid from users where QQ = ?";
+                try (Connection conn = dataSource.getConnection();
+                     PreparedStatement stmt = conn.prepareStatement(sqlOfMid)) {
+                    stmt.setString(1, auth.getQq());
+                    ResultSet resultSet = stmt.executeQuery();
+                    if (resultSet.next()) {
+                        long result = resultSet.getLong("mid");
+                        if (auth.getMid() == 0) auth.setMid(result);
+                        else {
+                            if (auth.getMid() != result) return false;
+                        }
+                    }
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
             }
-            resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
         }
-        return numberOfMid != 1;
-    }
-    private boolean existQQ(String QQ) {
-        String sqlOfMid = "select count(*) as count from users where mid= ?";
-        int numberOfMid = 0;
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sqlOfMid)) {
-            stmt.setString(1, QQ);
-            ResultSet resultSet = stmt.executeQuery(sqlOfMid);
-            if (resultSet.next()) {
-                numberOfMid = resultSet.getInt("count");
+        //wechat is valid
+        if (auth.getWechat() != null) {
+            String sqlOfWechat = "select count(*) as count from users where Wechat = ? ";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sqlOfWechat)) {
+                stmt.setString(1, auth.getWechat());
+                ResultSet resultSet = stmt.executeQuery();
+                if (resultSet.next()) {
+                    numberOfWechat = resultSet.getInt("count");
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
             }
-            resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-        return numberOfMid == 1;
-    }
-    private boolean existWechat(String Wechat) {
-        String sqlOfMid = "select count(*) as count from users where mid= ?";
-        int numberOfMid = 0;
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sqlOfMid)) {
-            stmt.setString(1, Wechat);
-            ResultSet resultSet = stmt.executeQuery(sqlOfMid);
-            if (resultSet.next()) {
-                numberOfMid = resultSet.getInt("count");
+            validOfWechat = numberOfWechat == 1;
+
+            if (validOfWechat) {
+                String sqlOfMid = "select mid as mid from users where wechat = ?";
+                try (Connection conn = dataSource.getConnection();
+                     PreparedStatement stmt = conn.prepareStatement(sqlOfMid)) {
+                    stmt.setString(1, auth.getWechat());
+                    ResultSet resultSet = stmt.executeQuery();
+                    if (resultSet.next()) {
+                        long result = resultSet.getLong("mid");
+                        if (auth.getMid() == 0) auth.setMid(result);
+                        else {
+                            if (auth.getMid() != result) return false;
+                        }
+                    }
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
             }
-            resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
         }
-        return numberOfMid == 1;
+        return validOfMid || validOfQQ || validOfWechat;
     }
 
     private boolean isValidReq(PostVideoReq req, AuthInfo auth) {
@@ -207,7 +227,7 @@ public class VideoServiceImpl implements VideoService {
     // true--duplicate
     private boolean isBVDuplicate(String bv) {
         boolean isDuplicate = false;
-        String query = "SELECT bv FROM videos WHERE bv = ?";
+        String query = "SELECT bv FROM video WHERE bv = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
             stmt.setString(1, bv);
@@ -216,8 +236,6 @@ public class VideoServiceImpl implements VideoService {
                 isDuplicate = true;
             }
             resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -226,7 +244,7 @@ public class VideoServiceImpl implements VideoService {
 
     private boolean isTitleDuplicate(String title) {
         boolean isDuplicate = false;
-        String query = "SELECT title FROM videos WHERE title = ?";
+        String query = "SELECT title FROM video WHERE title = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
             stmt.setString(1, title);
@@ -235,8 +253,6 @@ public class VideoServiceImpl implements VideoService {
                 isDuplicate = true;
             }
             resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -245,7 +261,7 @@ public class VideoServiceImpl implements VideoService {
 
     private boolean isTitleMidDuplicate(String title, long mid) {
         boolean isDuplicate = false;
-        String query = "SELECT * FROM videos WHERE title = ? and owner_mid = ?";
+        String query = "SELECT * FROM video WHERE title = ? and owner_mid = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
             stmt.setString(1, title);
@@ -255,8 +271,6 @@ public class VideoServiceImpl implements VideoService {
                 isDuplicate = true;
             }
             resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -268,14 +282,12 @@ public class VideoServiceImpl implements VideoService {
         String query = "SELECT * FROM users WHERE mid = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
-            stmt.setString(1, String.valueOf(mid));
+            stmt.setLong(1, mid);
             ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
                 isDuplicate = true;
             }
             resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -287,14 +299,12 @@ public class VideoServiceImpl implements VideoService {
         String name = null;
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
-            stmt.setString(1, String.valueOf(mid));
+            stmt.setLong(1, mid);
             ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
                 name = resultSet.getString("name");
             }
             resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -382,14 +392,12 @@ public class VideoServiceImpl implements VideoService {
         String query = "SELECT * FROM video WHERE bv = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
-            stmt.setString(1, String.valueOf(bv));
+            stmt.setString(1, bv);
             ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
                 find = true;
             }
             resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -439,10 +447,29 @@ public class VideoServiceImpl implements VideoService {
             stmt.setString(2, req.getDescription());
             stmt.setString(3, bv);
             int rowsAffected = stmt.executeUpdate();
-            return rowsAffected > 0;
+            return rowsAffected > 0 && isReview(bv);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+    }
+    private boolean isReview(String bv){
+        boolean isReview = false;
+        String query = "SELECT reviewer_mid FROM video WHERE bv = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setString(1, bv);
+            ResultSet resultSet = stmt.executeQuery();
+            if (resultSet.next()) {
+                isReview = true;
+            }
+            if (resultSet.wasNull()) {
+                isReview = false;
+            }
+            resultSet.close();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return isReview;
     }
 
     private boolean isReqChanged(PostVideoReq req, String bv) {
@@ -451,7 +478,7 @@ public class VideoServiceImpl implements VideoService {
         String query = "SELECT title, description, public_time FROM video WHERE BV = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
-            stmt.setString(1, String.valueOf(bv));
+            stmt.setString(1, bv);
             ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
                 String title = resultSet.getString("title");
@@ -462,8 +489,6 @@ public class VideoServiceImpl implements VideoService {
                 }
             }
             resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -475,7 +500,7 @@ public class VideoServiceImpl implements VideoService {
         String query = "SELECT duration FROM video WHERE BV = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
-            stmt.setString(1, String.valueOf(bv));
+            stmt.setString(1, bv);
             ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
                 int duration = resultSet.getInt("duration");
@@ -484,8 +509,6 @@ public class VideoServiceImpl implements VideoService {
                 }
             }
             resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -497,15 +520,13 @@ public class VideoServiceImpl implements VideoService {
         String query = "SELECT * FROM video WHERE owner_mid = ? and BV = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
-            stmt.setString(1, String.valueOf(auth.getMid()));
-            stmt.setString(2, String.valueOf(bv));
+            stmt.setLong(1, auth.getMid());
+            stmt.setString(2, bv);
             ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
                 isMatch = true;
             }
             resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -600,7 +621,7 @@ public class VideoServiceImpl implements VideoService {
             sqlBuilder.append(" + CASE WHEN LOWER(description) LIKE ? THEN 1 ELSE 0 END");
             sqlBuilder.append(" + CASE WHEN LOWER(owner_name) LIKE ? THEN 1 ELSE 0 END");
         }
-        sqlBuilder.append(") DESC, views DESC");
+        sqlBuilder.append(") DESC, view DESC");
         sqlBuilder.append(" LIMIT ? OFFSET ?");
 
         String searchSql = sqlBuilder.toString();
@@ -644,15 +665,13 @@ public class VideoServiceImpl implements VideoService {
         String identity = null;
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
-            stmt.setString(1, String.valueOf(auth.getMid()));
+            stmt.setLong(1, auth.getMid());
             ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
                 identity = resultSet.getString("identity");
-                if (identity.equals("superuser")) is = true;
+                if (identity.equals("SUPERUSER")) is = true;
             }
             resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -670,8 +689,6 @@ public class VideoServiceImpl implements VideoService {
                 isReviewed = true;
             }
             resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -691,6 +708,7 @@ public class VideoServiceImpl implements VideoService {
      * </ul>
      * If any of the corner case happened, {@code -1} shall be returned.
      */
+    // ok
     @Override
     public double getAverageViewRate(String bv) {
         if (!findVideo(bv)) return -1;
@@ -700,14 +718,12 @@ public class VideoServiceImpl implements VideoService {
         double avg = -1;
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
-            stmt.setString(1, String.valueOf(bv));
+            stmt.setString(1, bv);
             ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
                 avg = resultSet.getDouble("ave");
             }
             resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -719,14 +735,12 @@ public class VideoServiceImpl implements VideoService {
         String query = "SELECT * FROM view WHERE video_BV = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
-            stmt.setString(1, String.valueOf(bv));
+            stmt.setString(1, bv);
             ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
                 isWatched = true;
             }
             resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -752,12 +766,26 @@ public class VideoServiceImpl implements VideoService {
         // no one send danmu
         if (!isDanmu(bv)) return Collections.emptySet();
         Set<Integer> hotspotChunks = new HashSet<>();
-        String query = "SELECT floor(time / 10)  AS chunk FROM danmu WHERE BV = ? GROUP BY chunk ORDER BY COUNT(*) DESC LIMIT 1";
+//        String query = "SELECT floor(time / 10)  AS chunk FROM danmu WHERE BV = ? GROUP BY chunk ORDER BY COUNT(*) DESC LIMIT 1";
+        String query = "SELECT chunk FROM (\n" +
+                "    SELECT floor(time / 10) AS chunk, COUNT(*) AS count\n" +
+                "    FROM danmu\n" +
+                "    WHERE BV = ?\n" +
+                "    GROUP BY chunk\n" +
+                "    ORDER BY count DESC\n" +
+                ") AS subquery\n" +
+                "WHERE count = (SELECT MAX(count) FROM (\n" +
+                "    SELECT floor(time / 10) AS chunk, COUNT(*) AS count\n" +
+                "    FROM danmu\n" +
+                "    WHERE BV = ?\n" +
+                "    GROUP BY chunk\n" +
+                ") AS max_subquery);";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
             stmt.setString(1, bv);
+            stmt.setString(2, bv);
             ResultSet resultSet = stmt.executeQuery();
-            if (resultSet.next()) {
+            while (resultSet.next()) {
                 int chunk = resultSet.getInt("chunk");
                 hotspotChunks.add(chunk);
             }
@@ -773,14 +801,12 @@ public class VideoServiceImpl implements VideoService {
         String query = "SELECT * FROM danmu WHERE BV = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
-            stmt.setString(1, String.valueOf(bv));
+            stmt.setString(1, bv);
             ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
                 isDanmu = true;
             }
             resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -842,6 +868,7 @@ public class VideoServiceImpl implements VideoService {
      * </ul>
      * If any of the corner case happened, {@code false} shall be returned.
      */
+    // todo find mid
     @Override
     public boolean coinVideo(AuthInfo auth, String bv) {
         if(!isValidAuth(auth)) return false;
@@ -849,40 +876,61 @@ public class VideoServiceImpl implements VideoService {
         if(!isVideoReviewed(bv) && !isAuthSuperuser(auth)) return false;
         if(isMatchMidBv(auth,bv)) return false;
         if(getAuthCoin(auth) == 0) return false;
-
+        if(isCoinVideo(auth.getMid(),bv)) return false;
         // update the number of coin in the coin table
         // Decrease user's coin count by 1
         String updateCoin = "UPDATE Users SET coin = coin - 1 WHERE mid = ?";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(updateCoin)) {
-            stmt.setLong(1, auth.getMid());
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
         String updateVideo = "UPDATE video SET coin = coin + 1 WHERE bv = ?";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(updateVideo)) {
-            stmt.setString(1, bv);
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-        // Insert coin record
         String insertCoin = "INSERT INTO coin (video_BV, user_mid) VALUES (?, ?)";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(insertCoin)) {
-            stmt.setString(1, bv);
-            stmt.setLong(2, auth.getMid());
 
-            int rowsAffected = stmt.executeUpdate();
-            return rowsAffected > 0;
+        try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            // Update the number of coin in the coin table
+            // Decrease user's coin count by 1
+            try (PreparedStatement stmt = conn.prepareStatement(updateCoin)) {
+                stmt.setLong(1, auth.getMid());
+                stmt.executeUpdate();
+            }
+
+            try (PreparedStatement stmt = conn.prepareStatement(updateVideo)) {
+                stmt.setString(1, bv);
+                stmt.executeUpdate();
+            }
+            // Insert coin record
+            try (PreparedStatement stmt = conn.prepareStatement(insertCoin)) {
+                stmt.setString(1, bv);
+                stmt.setLong(2, auth.getMid());
+                int rowsAffected = stmt.executeUpdate();
+                conn.commit();
+                return rowsAffected > 0;
+            } catch (SQLException e) {
+                // todo Rollback
+                conn.rollback();
+                throw new RuntimeException(e);
+            }
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
 
     }
 
+    private boolean isCoinVideo(Long mid,String bv){
+        boolean isMatch = false;
+        String query = "SELECT * FROM coin WHERE user_mid = ? and video_bv = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setLong(1, mid);
+            stmt.setString(2, bv);
+            ResultSet resultSet = stmt.executeQuery();
+            if (resultSet.next()) {
+                isMatch = true;
+            }
+            resultSet.close();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return isMatch;
+    }
     private int getAuthCoin(AuthInfo auth){
         String selectCoin = "SELECT coin FROM Users WHERE mid = ?";
         try (Connection conn = dataSource.getConnection();
@@ -925,6 +973,7 @@ public class VideoServiceImpl implements VideoService {
         if(!findVideo(bv)) return false;
         if(!isVideoReviewed(bv) && !isAuthSuperuser(auth)) return false;
         if(isMatchMidBv(auth,bv)) return false;
+        if(isLikedVideo(auth.getMid(),bv)) return false;
 
         String updateVideo = "UPDATE video SET likes = likes + 1 WHERE bv = ?";
         try (Connection conn = dataSource.getConnection();
@@ -947,6 +996,23 @@ public class VideoServiceImpl implements VideoService {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+    }
+    private boolean isLikedVideo(Long mid, String bv){
+        boolean isMatch = false;
+        String query = "SELECT * FROM thumbs_up WHERE user_mid = ? and video_bv = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setLong(1, mid);
+            stmt.setString(2, bv);
+            ResultSet resultSet = stmt.executeQuery();
+            if (resultSet.next()) {
+                isMatch = true;
+            }
+            resultSet.close();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return isMatch;
     }
 
     /**
@@ -972,6 +1038,8 @@ public class VideoServiceImpl implements VideoService {
         if(!findVideo(bv)) return false;
         if(!isVideoReviewed(bv) && !isAuthSuperuser(auth)) return false;
         if(isMatchMidBv(auth,bv)) return false;
+        if(isFavoriteVideo(auth.getMid(),bv)) return false;
+
 
         String updateVideo = "UPDATE video SET favorite = favorite + 1 WHERE bv = ?";
         try (Connection conn = dataSource.getConnection();
@@ -994,5 +1062,22 @@ public class VideoServiceImpl implements VideoService {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+    }
+    private boolean isFavoriteVideo(long mid, String bv){
+        boolean isMatch = false;
+        String query = "SELECT * FROM favorite WHERE user_mid = ? and video_bv = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setLong(1, mid);
+            stmt.setString(2, bv);
+            ResultSet resultSet = stmt.executeQuery();
+            if (resultSet.next()) {
+                isMatch = true;
+            }
+            resultSet.close();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return isMatch;
     }
 }
