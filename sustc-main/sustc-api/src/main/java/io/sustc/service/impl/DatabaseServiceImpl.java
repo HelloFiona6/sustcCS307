@@ -100,21 +100,21 @@ public class DatabaseServiceImpl implements DatabaseService {
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
-            stmt.addBatch("ALTER TABLE follow ADD CONSTRAINT follow_follower_mid_fkey FOREIGN KEY (follower_mid) REFERENCES users(mid)");
-            stmt.addBatch("ALTER TABLE follow ADD CONSTRAINT follow_following_mid_fkey FOREIGN KEY (following_mid) REFERENCES users(mid)");
-            stmt.addBatch("ALTER TABLE video ADD CONSTRAINT video_owner_mid_fkey FOREIGN KEY (owner_mid) REFERENCES users(mid)");
-            stmt.addBatch("ALTER TABLE thumbs_up ADD CONSTRAINT thumbs_up_video_bv_fkey FOREIGN KEY (video_bv) REFERENCES video(bv)");
-            stmt.addBatch("ALTER TABLE thumbs_up ADD CONSTRAINT thumbs_up_user_mid_fkey FOREIGN KEY (user_mid) REFERENCES users(mid)");
-            stmt.addBatch("ALTER TABLE coin ADD CONSTRAINT coin_video_bv_fkey FOREIGN KEY (video_bv) REFERENCES video(bv)");
-            stmt.addBatch("ALTER TABLE coin ADD CONSTRAINT coin_user_mid_fkey FOREIGN KEY (user_mid) REFERENCES users(mid)");
-            stmt.addBatch("ALTER TABLE favorite ADD CONSTRAINT favorite_video_bv_fkey FOREIGN KEY (video_bv) REFERENCES video(bv)");
-            stmt.addBatch("ALTER TABLE favorite ADD CONSTRAINT favorite_user_mid_fkey FOREIGN KEY (user_mid) REFERENCES users(mid)");
-            stmt.addBatch("ALTER TABLE view ADD CONSTRAINT view_video_bv_fkey FOREIGN KEY (video_bv) REFERENCES video(bv)");
-            stmt.addBatch("ALTER TABLE view ADD CONSTRAINT view_user_mid_fkey FOREIGN KEY (user_mid) REFERENCES users(mid)");
-            stmt.addBatch("ALTER TABLE danmu ADD CONSTRAINT danmu_bv_fkey FOREIGN KEY (bv) REFERENCES video(bv)");
-            stmt.addBatch("ALTER TABLE danmu ADD CONSTRAINT danmu_user_mid_fkey FOREIGN KEY (user_mid) REFERENCES users(mid)");
-            stmt.addBatch("ALTER TABLE danmulikeby ADD CONSTRAINT danmulikeby_mid_fkey FOREIGN KEY (mid) REFERENCES users(mid)");
-            stmt.addBatch("ALTER TABLE danmulikeby ADD CONSTRAINT danmulikeby_danmu_id_fkey FOREIGN KEY (danmu_id) REFERENCES danmu(danmu_id)");
+            stmt.addBatch("ALTER TABLE follow ADD CONSTRAINT follow_follower_mid_fkey FOREIGN KEY (follower_mid) REFERENCES users(mid) ON DELETE CASCADE");
+            stmt.addBatch("ALTER TABLE follow ADD CONSTRAINT follow_following_mid_fkey FOREIGN KEY (following_mid) REFERENCES users(mid) ON DELETE CASCADE");
+            stmt.addBatch("ALTER TABLE video ADD CONSTRAINT video_owner_mid_fkey FOREIGN KEY (owner_mid) REFERENCES users(mid) ON DELETE CASCADE");
+            stmt.addBatch("ALTER TABLE thumbs_up ADD CONSTRAINT thumbs_up_video_bv_fkey FOREIGN KEY (video_bv) REFERENCES video(bv) ON DELETE CASCADE");
+            stmt.addBatch("ALTER TABLE thumbs_up ADD CONSTRAINT thumbs_up_user_mid_fkey FOREIGN KEY (user_mid) REFERENCES users(mid) ON DELETE CASCADE");
+            stmt.addBatch("ALTER TABLE coin ADD CONSTRAINT coin_video_bv_fkey FOREIGN KEY (video_bv) REFERENCES video(bv) ON DELETE CASCADE");
+            stmt.addBatch("ALTER TABLE coin ADD CONSTRAINT coin_user_mid_fkey FOREIGN KEY (user_mid) REFERENCES users(mid) ON DELETE CASCADE");
+            stmt.addBatch("ALTER TABLE favorite ADD CONSTRAINT favorite_video_bv_fkey FOREIGN KEY (video_bv) REFERENCES video(bv) ON DELETE CASCADE");
+            stmt.addBatch("ALTER TABLE favorite ADD CONSTRAINT favorite_user_mid_fkey FOREIGN KEY (user_mid) REFERENCES users(mid) ON DELETE CASCADE");
+            stmt.addBatch("ALTER TABLE view ADD CONSTRAINT view_video_bv_fkey FOREIGN KEY (video_bv) REFERENCES video(bv) ON DELETE CASCADE");
+            stmt.addBatch("ALTER TABLE view ADD CONSTRAINT view_user_mid_fkey FOREIGN KEY (user_mid) REFERENCES users(mid) ON DELETE CASCADE");
+            stmt.addBatch("ALTER TABLE danmu ADD CONSTRAINT danmu_bv_fkey FOREIGN KEY (bv) REFERENCES video(bv) ON DELETE CASCADE");
+            stmt.addBatch("ALTER TABLE danmu ADD CONSTRAINT danmu_user_mid_fkey FOREIGN KEY (user_mid) REFERENCES users(mid) ON DELETE CASCADE");
+            stmt.addBatch("ALTER TABLE danmulikeby ADD CONSTRAINT danmulikeby_mid_fkey FOREIGN KEY (mid) REFERENCES users(mid) ON DELETE CASCADE");
+            stmt.addBatch("ALTER TABLE danmulikeby ADD CONSTRAINT danmulikeby_danmu_id_fkey FOREIGN KEY (danmu_id) REFERENCES danmu(danmu_id) ON DELETE CASCADE");
             stmt.executeBatch();
             conn.commit();
         } catch (SQLException e) {

@@ -67,7 +67,6 @@ public class VideoServiceImpl implements VideoService {
         return bv;
     }
 
-    // todo reviewer is null, which conflicts with the foreign key
     private void importVideoRecord(VideoRecord videoRecord) {
         String videoSql = "INSERT INTO video (bv, title, owner_mid, owner_name, commit_time, review_time, public_time, duration, description, reviewer_mid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection conn = dataSource.getConnection()) {
@@ -82,7 +81,13 @@ public class VideoServiceImpl implements VideoService {
                 videoStmt.setTimestamp(7, videoRecord.getPublicTime());
                 videoStmt.setFloat(8, videoRecord.getDuration());
                 videoStmt.setString(9, videoRecord.getDescription());
-                videoStmt.setLong(10, videoRecord.getReviewer());
+//                videoStmt.setLong(10, videoRecord.getReviewer());
+                Long reviewer = videoRecord.getReviewer();
+                if (reviewer != null) {
+                    videoStmt.setLong(10, reviewer);
+                } else {
+                    videoStmt.setNull(10, Types.BIGINT);
+                }
 
                 videoStmt.execute();
             }
@@ -93,7 +98,7 @@ public class VideoServiceImpl implements VideoService {
     }
 
     /**
-     *   <li>the {@code auth} is invalid
+     * <li>the {@code auth} is invalid
      *     <ul>
      *       <li>both {@code qq} and {@code wechat} are non-empty while they do not correspond to same user</li>
      *       <li>{@code mid} is invalid while {@code qq} and {@code wechat} are both invalid (empty or not found)</li>
@@ -200,7 +205,7 @@ public class VideoServiceImpl implements VideoService {
         if (req.getDuration() < 10) {
             return false;
         }
-        if (req.getPublicTime() != null && req.getPublicTime().before(Timestamp.valueOf(LocalDateTime.now()))) {
+        if (req.getPublicTime() == null || req.getPublicTime().before(Timestamp.valueOf(LocalDateTime.now()))) {
             return false;
         }
         // have post
@@ -376,9 +381,9 @@ public class VideoServiceImpl implements VideoService {
         if (!isValidAuth(auth)) return false;
         // cannot find video
         if (!findVideo(bv)) return false;
-        if(!(isMatchMidBv(auth,bv) || isAuthSuperuser(auth))) return false;
+        if (!(isMatchMidBv(auth, bv) || isAuthSuperuser(auth))) return false;
 
-        String deleteVideo = "DELETE FROM Video WHERE BV = ?";
+        String deleteVideo = "DELETE FROM video WHERE BV = ?";
 
         try (Connection conn = dataSource.getConnection();
              PreparedStatement videoStmt = conn.prepareStatement(deleteVideo)
@@ -390,6 +395,7 @@ public class VideoServiceImpl implements VideoService {
             throw new RuntimeException(e);
         }
     }
+
     private ArrayList<Long> getDanmuId(String bv) {
         ArrayList<Long> danmuIds = new ArrayList<>();
         String query = "SELECT danmu_id FROM danmu WHERE BV = ?";
@@ -446,9 +452,11 @@ public class VideoServiceImpl implements VideoService {
      * </ul>
      * If any of the corner case happened, {@code false} shall be returned.
      */
+    //Wrong answer for [AuthInfo(mid=38606568, password=null, qq=4977628, wechat=null), BV1bt4y1x7Wk, PostVideoReq(title=《 奇 怪 的 小 兔 叽 增 加 了 》488, description=null, duration=397.0, publicTime=2025-12-01 12:00:00.0)]: expected false, got true
+    //Wrong answer for [AuthInfo(mid=250858633, password=null, qq=9469689365, wechat=null), BV1cJ411H77j, PostVideoReq(title=《 奇 怪 的 小 兔 叽 增 加 了 》611, description=null, duration=479.0, publicTime=2025-12-01 12:00:00.0)]: expected false, got true
     @Override
     public boolean updateVideoInfo(AuthInfo auth, String bv, PostVideoReq req) {
-        if(!isValidAuth(auth)) return false;
+        if (!isValidAuth(auth)) return false;
         // find video
         if (!findVideo(bv)) return false;
         // auth is not the owner
@@ -459,21 +467,22 @@ public class VideoServiceImpl implements VideoService {
         if (isDurationChanged(req, bv)) return false;
         // req is not changed
         if (!isReqChanged(req, bv)) return false;
-
+        boolean isRe = isReview(bv);
         // update
-        String updateSql = "UPDATE video SET title = ?, description = ? WHERE bv = ?";
+        String updateSql = "UPDATE video SET title = ?, description = ? , review_time = null, reviewer_mid = null WHERE bv = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(updateSql)) {
             stmt.setString(1, req.getTitle());
             stmt.setString(2, req.getDescription());
             stmt.setString(3, bv);
             int rowsAffected = stmt.executeUpdate();
-            return rowsAffected > 0 && isReview(bv);
+            return rowsAffected > 0 && isRe;
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
-    private boolean isReview(String bv){
+
+    private boolean isReview(String bv) {
         boolean isReview = false;
         String query = "SELECT reviewer_mid FROM video WHERE bv = ?";
         try (Connection conn = dataSource.getConnection();
@@ -852,18 +861,18 @@ public class VideoServiceImpl implements VideoService {
      */
     @Override
     public boolean reviewVideo(AuthInfo auth, String bv) {
-        if(!isValidAuth(auth)) return false;
-        if(!findVideo(bv)) return false;
-        if(!isAuthSuperuser(auth)) return false;
-        if(isVideoReviewed(bv)) return false;
+        if (!isValidAuth(auth)) return false;
+        if (!findVideo(bv)) return false;
+        if (!isAuthSuperuser(auth)) return false;
+        if (isVideoReviewed(bv)) return false;
 
         String updateVideo = "UPDATE video SET reviewer_mid = ?, review_time = ? WHERE bv = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(updateVideo)) {
 
-            stmt.setLong(1, auth.getMid());  // 设置 reviewer_mid 的值
-            stmt.setTimestamp(2, new Timestamp(System.currentTimeMillis()));  // 设置 review_time 的值
-            stmt.setString(3, bv);  // 设置 bv 的值
+            stmt.setLong(1, auth.getMid());
+            stmt.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
+            stmt.setString(3, bv);
 
             int rowsAffected = stmt.executeUpdate();
             return rowsAffected > 0;
@@ -892,12 +901,12 @@ public class VideoServiceImpl implements VideoService {
     // todo find mid
     @Override
     public boolean coinVideo(AuthInfo auth, String bv) {
-        if(!isValidAuth(auth)) return false;
-        if(!findVideo(bv)) return false;
-        if(!isVideoReviewed(bv) && !isAuthSuperuser(auth)) return false;
-        if(isMatchMidBv(auth,bv)) return false;
-        if(getAuthCoin(auth) == 0) return false;
-        if(isCoinVideo(auth.getMid(),bv)) return false;
+        if (!isValidAuth(auth)) return false;
+        if (!findVideo(bv)) return false;
+        if (!isVideoReviewed(bv) && !isAuthSuperuser(auth)) return false;
+        if (isMatchMidBv(auth, bv)) return false;
+        if (getAuthCoin(auth) == 0) return false;
+        if (isCoinVideo(auth.getMid(), bv)) return false;
         // update the number of coin in the coin table
         // Decrease user's coin count by 1
         String updateCoin = "UPDATE Users SET coin = coin - 1 WHERE mid = ?";
@@ -935,7 +944,7 @@ public class VideoServiceImpl implements VideoService {
 
     }
 
-    private boolean isCoinVideo(Long mid,String bv){
+    private boolean isCoinVideo(Long mid, String bv) {
         boolean isMatch = false;
         String query = "SELECT * FROM coin WHERE user_mid = ? and video_bv = ?";
         try (Connection conn = dataSource.getConnection();
@@ -952,7 +961,8 @@ public class VideoServiceImpl implements VideoService {
         }
         return isMatch;
     }
-    private int getAuthCoin(AuthInfo auth){
+
+    private int getAuthCoin(AuthInfo auth) {
         String selectCoin = "SELECT coin FROM Users WHERE mid = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(selectCoin)) {
@@ -988,13 +998,30 @@ public class VideoServiceImpl implements VideoService {
      * </ul>
      * If any of the corner case happened, {@code false} shall be returned.
      */
+    // todo [AuthInfo mid=241679003, password=null, qq=07137359674, wechat=null),BV1U94y1d71R]: expected true, got false
+    /*
+Wrong answer for [AuthInfo(mid=875505, password=null, qq=214328647, wechat=null), BV1ef4y1R71D]: expected false, got true
+Wrong answer for [AuthInfo(mid=217304, password=kCcdfog(oo, qq=null, wechat=null), BV1mG4y1z761]: expected false, got true
+Wrong answer for [AuthInfo(mid=1804386, password=%OTlEZMEvK+FN*, qq=null, wechat=null), BV1pM4y1e7Ke]: expected false, got true
+     */
     @Override
     public boolean likeVideo(AuthInfo auth, String bv) {
-        if(!isValidAuth(auth)) return false;
-        if(!findVideo(bv)) return false;
-        if(!isVideoReviewed(bv) && !isAuthSuperuser(auth)) return false;
-        if(isMatchMidBv(auth,bv)) return false;
-        if(isLikedVideo(auth.getMid(),bv)) return false;
+        if (!isValidAuth(auth)) return false;
+        if (!findVideo(bv)) return false;
+        if (!isVideoReviewed(bv) && !isAuthSuperuser(auth)) return false;
+        if (isMatchMidBv(auth, bv)) return false;
+        if (isLikedVideo(auth.getMid(), bv)) {
+            String deleteLikes = "delete from thumbs_up where user_mid=? and video_bv=?\n";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(deleteLikes)) {
+                stmt.setLong(1, auth.getMid());
+                stmt.setString(2, bv);
+                stmt.executeUpdate();
+                return false;
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
 
         String updateVideo = "UPDATE video SET likes = likes + 1 WHERE bv = ?";
         try (Connection conn = dataSource.getConnection();
@@ -1005,9 +1032,9 @@ public class VideoServiceImpl implements VideoService {
             throw new RuntimeException(e);
         }
         // update the like in the thumbs_up table
-        String insertCoin = "insert into thumbs_up (video_BV, user_mid) values (?,?)";
+        String insertLikes = "insert into thumbs_up (video_BV, user_mid) values (?,?)";
         try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(insertCoin)) {
+             PreparedStatement stmt = conn.prepareStatement(insertLikes)) {
 
             stmt.setString(1, bv);
             stmt.setLong(2, auth.getMid());
@@ -1017,8 +1044,10 @@ public class VideoServiceImpl implements VideoService {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+
     }
-    private boolean isLikedVideo(Long mid, String bv){
+
+    private boolean isLikedVideo(Long mid, String bv) {
         boolean isMatch = false;
         String query = "SELECT * FROM thumbs_up WHERE user_mid = ? and video_bv = ?";
         try (Connection conn = dataSource.getConnection();
@@ -1055,11 +1084,11 @@ public class VideoServiceImpl implements VideoService {
      */
     @Override
     public boolean collectVideo(AuthInfo auth, String bv) {
-        if(!isValidAuth(auth)) return false;
-        if(!findVideo(bv)) return false;
-        if(!isVideoReviewed(bv) && !isAuthSuperuser(auth)) return false;
-        if(isMatchMidBv(auth,bv)) return false;
-        if(isFavoriteVideo(auth.getMid(),bv)) return false;
+        if (!isValidAuth(auth)) return false;
+        if (!findVideo(bv)) return false;
+        if (!isVideoReviewed(bv) && !isAuthSuperuser(auth)) return false;
+        if (isMatchMidBv(auth, bv)) return false;
+        if (isFavoriteVideo(auth.getMid(), bv)) return false;
 
 
         String updateVideo = "UPDATE video SET favorite = favorite + 1 WHERE bv = ?";
@@ -1084,7 +1113,8 @@ public class VideoServiceImpl implements VideoService {
             throw new RuntimeException(e);
         }
     }
-    private boolean isFavoriteVideo(long mid, String bv){
+
+    private boolean isFavoriteVideo(long mid, String bv) {
         boolean isMatch = false;
         String query = "SELECT * FROM favorite WHERE user_mid = ? and video_bv = ?";
         try (Connection conn = dataSource.getConnection();
