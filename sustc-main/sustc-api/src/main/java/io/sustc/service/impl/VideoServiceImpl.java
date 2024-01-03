@@ -327,40 +327,62 @@ public class VideoServiceImpl implements VideoService {
      * If any of the corner case happened, {@code false} shall be returned.
      */
     @Override
+//    public boolean deleteVideo(AuthInfo auth, String bv) {
+//        // if auth is invalid
+//        if(!isValidAuth(auth)) return false;
+//        // cannot find video
+//        if (!findVideo(bv)) return false;
+//        if(!(isMatchMidBv(auth,bv) || isAuthSuperuser(auth))) return false;
+//        // delete info except video
+//
+//        ArrayList<Long> danmuIds = getDanmuId(bv);
+//        String deleteDanmuLike = "DELETE FROM DanmuLikeBy WHERE danmu_id = ?";
+//        try (Connection conn = dataSource.getConnection();
+//             PreparedStatement danmuLikeStmt = conn.prepareStatement(deleteDanmuLike)) {
+//            for (Long danmuId : danmuIds) {
+//                danmuLikeStmt.setLong(1, danmuId);
+//                danmuLikeStmt.executeUpdate();
+//            }
+//        } catch (SQLException e) {
+//            throw new RuntimeException(e);
+//        }
+//        String deleteVideo = "DELETE FROM video WHERE bv = ?";
+//        String deleteView = "delete from view where video_BV= ?";
+//        String deleteFavorite = "delete from Favorite where video_BV= ?";
+//        String deleteCoin = "delete from coin where video_BV= ?";
+//        String deleteLike = "delete from thumbs_up where video_BV= ?";
+//        try (Connection conn = dataSource.getConnection();
+//             PreparedStatement viewStmt = conn.prepareStatement(deleteView);
+//             PreparedStatement favoriteStmt = conn.prepareStatement(deleteFavorite);
+//             PreparedStatement coinStmt = conn.prepareStatement(deleteCoin);
+//             PreparedStatement likeStmt = conn.prepareStatement(deleteLike);
+//             PreparedStatement videoStmt = conn.prepareStatement(deleteVideo)
+//        ) {
+//            viewStmt.setString(1, bv);
+//            favoriteStmt.setString(1, bv);
+//            coinStmt.setString(1, bv);
+//            likeStmt.setString(1, bv);
+//            videoStmt.setString(1, bv);
+//            int rowsAffected = videoStmt.executeUpdate();
+//            return rowsAffected > 0;
+//        } catch (SQLException e) {
+//            throw new RuntimeException(e);
+//        }
+//    }
+
+    // small ok
     public boolean deleteVideo(AuthInfo auth, String bv) {
         // if auth is invalid
-        if(!isValidAuth(auth)) return false;
+        if (!isValidAuth(auth)) return false;
         // cannot find video
         if (!findVideo(bv)) return false;
-        // delete info except video
+        if(!(isMatchMidBv(auth,bv) || isAuthSuperuser(auth))) return false;
 
-        ArrayList<Long> danmuIds = getDanmuId(bv);
-        String deleteDanmuLike = "DELETE FROM DanmuLikeBy WHERE danmu_id = ?";
+        String deleteVideo = "DELETE FROM Video WHERE BV = ?";
+
         try (Connection conn = dataSource.getConnection();
-             PreparedStatement danmuLikeStmt = conn.prepareStatement(deleteDanmuLike)) {
-            for (Long danmuId : danmuIds) {
-                danmuLikeStmt.setLong(1, danmuId);
-                danmuLikeStmt.executeUpdate();
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-        String deleteVideo = "DELETE FROM video WHERE bv = ?";
-        String deleteView = "delete from view where video_BV= ?";
-        String deleteFavorite = "delete from Favorite where video_BV= ?";
-        String deleteCoin = "delete from coin where video_BV= ?";
-        String deleteLike = "delete from thumbs_up where video_BV= ?";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement viewStmt = conn.prepareStatement(deleteView);
-             PreparedStatement favoriteStmt = conn.prepareStatement(deleteFavorite);
-             PreparedStatement coinStmt = conn.prepareStatement(deleteCoin);
-             PreparedStatement likeStmt = conn.prepareStatement(deleteLike);
              PreparedStatement videoStmt = conn.prepareStatement(deleteVideo)
         ) {
-            viewStmt.setString(1, bv);
-            favoriteStmt.setString(1, bv);
-            coinStmt.setString(1, bv);
-            likeStmt.setString(1, bv);
             videoStmt.setString(1, bv);
             int rowsAffected = videoStmt.executeUpdate();
             return rowsAffected > 0;
@@ -368,7 +390,6 @@ public class VideoServiceImpl implements VideoService {
             throw new RuntimeException(e);
         }
     }
-
     private ArrayList<Long> getDanmuId(String bv) {
         ArrayList<Long> danmuIds = new ArrayList<>();
         String query = "SELECT danmu_id FROM danmu WHERE BV = ?";
