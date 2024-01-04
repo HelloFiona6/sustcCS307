@@ -13,6 +13,7 @@ import javax.sql.DataSource;
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -468,6 +469,7 @@ public class VideoServiceImpl implements VideoService {
         // req is not changed
         if (!isReqChanged(req, bv)) return false;
         boolean isRe = isReview(bv);
+//        if(bv.equals("BV1bt4y1x7Wk") || bv.equals("BV1cJ411H77j")) System.out.println(bv+isRe);
         // update
         String updateSql = "UPDATE video SET title = ?, description = ? , review_time = null, reviewer_mid = null WHERE bv = ?";
         try (Connection conn = dataSource.getConnection();
@@ -484,18 +486,19 @@ public class VideoServiceImpl implements VideoService {
 
     private boolean isReview(String bv) {
         boolean isReview = false;
+        String string = "";
         String query = "SELECT reviewer_mid FROM video WHERE bv = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
             stmt.setString(1, bv);
             ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
+                string = resultSet.getString("reviewer_mid");
+                if (string == null) return false;
                 isReview = true;
             }
-            if (resultSet.wasNull()) {
-                isReview = false;
-            }
             resultSet.close();
+//            if(bv.equals("BV1bt4y1x7Wk") || bv.equals("BV1cJ411H77j")) System.out.println(bv+" "+isReview+" "+string);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -615,78 +618,137 @@ public class VideoServiceImpl implements VideoService {
      * </ul>
      * If any of the corner case happened, {@code null} shall be returned.
      */
+
+//Wrong answer for [AuthInfo(mid=104234979, password=null, qq=140277, wechat=null), %.... .*skjaxjakscnkjasjke@@@@32r2342?.*.*///%%%%%%%%, 10, 1]: expected [], got [BV1rq4y1k7SH]
+    /*
+Wrong answer for [AuthInfo(mid=423210, password=null, qq=962260, wechat=null), 猫猫     好人  坏 ？ ！, 10, 2]: expected [BV1bt4y1x7Wk, BV1fu411L7FW, BV1P64y1o7RZ, BV1aG4y1z746, BV1Q7411J751, BV1FJ411M7rM, BV1Q3411M79u, BV1ef4y1R71D, BV1Yb4y1q7FH, BV1Kb411L79v], got [BV1P64y1o7RZ, BV1p44y1i7cb, BV1Kb411L79v, BV1sz411z7Qb, BV1aG4y1z746, BV1s7411j7yk, BV1F7411v7MH, BV1PK4y1b7dt, BV1FJ411M7rM, BV1MJ411U7T5]
+Wrong answer for [AuthInfo(mid=353312519, password=null, qq=null, wechat=htMh!EWVPruq), you m TUbE mM, 10, 1]: expected [BV1cX4y1L7nq, BV1Yb4y1q7FH, BV1PK4y1b7dt, BV1rq4y1k7SH, BV1FJ411M7rM, BV19t4y1E7hh, BV1Kb411L79v, BV1Mv4y1N7WJ, BV1Q7411J751, BV1bt4y1x7Wk], got [BV1FJ411M7rM, BV19t4y1E7hh, BV1PK4y1b7dt, BV1Yb4y1q7FH, BV1Q7411J751, BV1bt4y1x7Wk, BV1p5411879s, BV1Mv4y1N7WJ, BV1pM4y1e7Ke, BV1ef4y1R71D]
+Wrong answer for [AuthInfo(mid=662071, password=null, qq=null, wechat=wxid_E%WvN$sdaJ@eZBij), AbcDefGHIjKL 你们 UP !! 这 啊啊啊啊啊啊啊啊啊啊啊啊啊啊啊, 3, 2]: expected [BV1rq4y1k7SH, BV1Q7411J751, BV1ef4y1R71D], got [BV1rq4y1k7SH, BV1mG4y1z761, BV1bt4y1x7Wk]
+Wrong answer for [AuthInfo(mid=1930343, password=null, qq=673500633, wechat=null), 谁 我的 官方, 10, 1]: expected [BV1PK4y1b7dt, BV1Rg411w7uU, BV1rq4y1k7SH, BV1FJ411M7rM, BV1pM4y1e7Ke, BV1JZ4y1h7nD, BV187411H782, BV1s7411j7yk], got [BV1PK4y1b7dt, BV1rq4y1k7SH, BV1Rg411w7uU, BV1FJ411M7rM, BV1pM4y1e7Ke, BV1JZ4y1h7nD, BV187411H782, BV1s7411j7yk]
+Wrong answer for [AuthInfo(mid=270397, password=null, qq=7091374, wechat=null), . \d+, 10, 1]: expected [BV1p5411879s, BV1Kb411L79v, BV1rq4y1k7SH, BV19t4y1E7hh, BV1U94y1d71R, BV1Mv4y1N7WJ, BV1FJ411M7rM, BV1aU4y1G7ek, BV1aG4y1z746, BV15u41187N1], got [BV19t4y1E7hh, BV1FJ411M7rM, BV1p5411879s, BV1Mv4y1N7WJ, BV1U94y1d71R, BV1aU4y1G7ek, BV1Kb411L79v, BV1rq4y1k7SH, BV1aG4y1z746, BV15u41187N1]
+Wrong answer for [AuthInfo(mid=494462, password=znlV=^hI, qq=null, wechat=null), 狗 为什么  这个 好的！ ？？？？？ ！@ 哦 xiexienimen 你 们 幸 苦 了 感谢 co p i lo t在 数据 生成时 作出的 巨大 贡献, 17, 3]: expected [BV1XP4y1T7zz, BV1p44y1i7cb], got [BV1p44y1i7cb, BV1aG4y1z746, BV1Q3411M79u, BV1Wh4y1G74h, BV1U94y1d71R, BV1aU4y1G7ek, BV1j5411H7zk, BV1Ah411m7GM, BV1vZ4y187Zs, BV15u41187N1]
+
+     */
     @Override
     public List<String> searchVideo(AuthInfo auth, String keywords, int pageSize, int pageNum) {
-        if (!isValidAuth(auth)) {
-            return null;
-        }
+        if (!isValidAuth(auth)) return null;
+        if (keywords == null || keywords.isEmpty()) return null;
+        if (pageSize <= 0 || pageNum <= 0) return null;
 
-        if (keywords == null || keywords.isEmpty()) {
-            return null;
-        }
-        // pageSize pageNum
-        if (pageSize <= 0 || pageNum <= 0) {
-            return null;
-        }
-
-        String[] keywordArray = keywords.split(" ");
-
-        // build query
-        StringBuilder sqlBuilder = new StringBuilder();
-        sqlBuilder.append("SELECT bv FROM video WHERE ");
+//        String[] keywordArray = keywords.split(" ");
+        String[] keywordArray = keywords.split("\\s+");
+//        System.out.println(Arrays.toString(keywordArray));
         for (int i = 0; i < keywordArray.length; i++) {
-            if (i > 0) {
-                sqlBuilder.append(" OR ");
-            }
-            sqlBuilder.append("LOWER(title) LIKE ?");
-            sqlBuilder.append(" OR LOWER(description) LIKE ?");
-            sqlBuilder.append(" OR LOWER(owner_name) LIKE ?");
+            keywordArray[i] = Pattern.quote(keywordArray[i]).replaceAll("\\\\", "\\\\\\\\").replace("?", "\\?");
+//            keywordArray[i] = keywordArray[i].replace("\\\\", "\\\\\\\\");
+//            keywordArray[i] = keywordArray[i].replace("?", "\\?");
+//            keywordArray[i] = Pattern.quote(keywordArray[i]).replace("?", "\\?");
         }
-        sqlBuilder.append(" ORDER BY (");
+//        System.out.println(Arrays.toString(keywordArray));
+        StringBuilder stringBuilder = new StringBuilder();
+//        stringBuilder.append("[");
+
         for (int i = 0; i < keywordArray.length; i++) {
-            if (i > 0) {
-                sqlBuilder.append(" + ");
+            stringBuilder.append("'");
+            stringBuilder.append(keywordArray[i]);
+            stringBuilder.append("'");
+
+            if (i != keywordArray.length - 1) {
+                stringBuilder.append(",");
             }
-            sqlBuilder.append("CASE WHEN LOWER(title) LIKE ? THEN 1 ELSE 0 END");
-            sqlBuilder.append(" + CASE WHEN LOWER(description) LIKE ? THEN 1 ELSE 0 END");
-            sqlBuilder.append(" + CASE WHEN LOWER(owner_name) LIKE ? THEN 1 ELSE 0 END");
         }
-        sqlBuilder.append(") DESC, view DESC");
-        sqlBuilder.append(" LIMIT ? OFFSET ?");
+//        stringBuilder.append("]");
 
-        String searchSql = sqlBuilder.toString();
+//        System.out.println(String.valueOf(stringBuilder));
 
-        // connect to database
+        List<String> search = new ArrayList<>();
+        String bv;
+        String sql1 = "SELECT * FROM (SELECT DISTINCT bv,\n" +
+                "                      SUM(array_length(regexp_split_to_array(lower(title || description || owner_name), keyword), 1) - 1)OVER (PARTITION BY bv) AS count,\n" +
+                "                      view\n" +
+                "      FROM video CROSS JOIN unnest(ARRAY [?]) AS keyword\n" +
+                "      WHERE lower(title || description || owner_name) ~* keyword ";
+        String sql2 = " ORDER BY count DESC, view DESC) AS subquery OFFSET ? LIMIT ?;";
+        String mid = " AND review_time IS NOT NULL AND public_time <= current_timestamp ";
+        String sql;
+        if (isAuthSuperuser(auth)) sql = sql1 + sql2;
+        else sql = sql1 + mid + sql2;
+
         try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(searchSql)) {
-            int paramIndex = 1;
-            for (String keyword : keywordArray) {
-                String lowerKeyword = keyword.toLowerCase();
-                stmt.setString(paramIndex++, "%" + lowerKeyword + "%"); // title
-                stmt.setString(paramIndex++, "%" + lowerKeyword + "%"); // description
-                stmt.setString(paramIndex++, "%" + lowerKeyword + "%"); // owner_mid
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+//            stmt.setString(1, String.valueOf(stringBuilder));
+            Array array = conn.createArrayOf("varchar", keywordArray);
+            stmt.setArray(1,array);
+            stmt.setInt(2, (pageNum-1) * pageSize);
+            stmt.setInt(3, pageSize);
+            ResultSet resultSet = stmt.executeQuery();
+            while (resultSet.next()) {
+                bv = resultSet.getString(1);
+//                if(auth.getMid()==1660139 || auth.getMid()== 1930343) System.out.println(bv);
+                search.add(bv);
             }
-            for (String keyword : keywordArray) {
-                String lowerKeyword = keyword.toLowerCase();
-                stmt.setString(paramIndex++, "%" + lowerKeyword + "%");
-                stmt.setString(paramIndex++, "%" + lowerKeyword + "%");
-                stmt.setString(paramIndex++, "%" + lowerKeyword + "%");
-            }
-            stmt.setInt(paramIndex++, pageSize);
-            stmt.setInt(paramIndex, (pageNum - 1) * pageSize);
-
-            List<String> result = new ArrayList<>();
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    String bv = rs.getString("bv");
-                    // Unreviewed or unpublished videos are only visible to superusers or the video owner
-                    if (isVideoReviewed(bv) || isAuthSuperuser(auth) || isMatchMidBv(auth, bv)) result.add(bv);
-                }
-            }
-            return result;
+            resultSet.close();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+        return search;
+
+//        // build query
+//        StringBuilder sqlBuilder = new StringBuilder();
+//        sqlBuilder.append("SELECT bv FROM video WHERE ");
+//        for (int i = 0; i < keywordArray.length; i++) {
+//            if (i > 0) {
+//                sqlBuilder.append(" OR ");
+//            }
+//            sqlBuilder.append("LOWER(title) LIKE ?");
+//            sqlBuilder.append(" OR LOWER(description) LIKE ?");
+//            sqlBuilder.append(" OR LOWER(owner_name) LIKE ?");
+//        }
+//        sqlBuilder.append(" ORDER BY (");
+//        for (int i = 0; i < keywordArray.length; i++) {
+//            if (i > 0) {
+//                sqlBuilder.append(" + ");
+//            }
+//            sqlBuilder.append("CASE WHEN LOWER(title) LIKE ? THEN 1 ELSE 0 END");
+//            sqlBuilder.append(" + CASE WHEN LOWER(description) LIKE ? THEN 1 ELSE 0 END");
+//            sqlBuilder.append(" + CASE WHEN LOWER(owner_name) LIKE ? THEN 1 ELSE 0 END");
+//        }
+//        sqlBuilder.append(") DESC, view DESC");
+//        sqlBuilder.append(" LIMIT ? OFFSET ?");
+//
+//        String searchSql = sqlBuilder.toString();
+//
+//        // connect to database
+//        try (Connection conn = dataSource.getConnection();
+//             PreparedStatement stmt = conn.prepareStatement(searchSql)) {
+//            int paramIndex = 1;
+//            for (String keyword : keywordArray) {
+//                String lowerKeyword = keyword.toLowerCase();
+//                stmt.setString(paramIndex++, "%" + lowerKeyword + "%"); // title
+//                stmt.setString(paramIndex++, "%" + lowerKeyword + "%"); // description
+//                stmt.setString(paramIndex++, "%" + lowerKeyword + "%"); // owner_mid
+//            }
+//            for (String keyword : keywordArray) {
+//                String lowerKeyword = keyword.toLowerCase();
+//                stmt.setString(paramIndex++, "%" + lowerKeyword + "%");
+//                stmt.setString(paramIndex++, "%" + lowerKeyword + "%");
+//                stmt.setString(paramIndex++, "%" + lowerKeyword + "%");
+//            }
+//            stmt.setInt(paramIndex++, pageSize);
+//            stmt.setInt(paramIndex, (pageNum - 1) * pageSize);
+//
+//            List<String> result = new ArrayList<>();
+//            try (ResultSet rs = stmt.executeQuery()) {
+//                while (rs.next()) {
+//                    String bv = rs.getString("bv");
+//                    // Unreviewed or unpublished videos are only visible to superusers or the video owner
+//                    if (isVideoReviewed(bv) || isAuthSuperuser(auth) || isMatchMidBv(auth, bv)) result.add(bv);
+//                }
+//            }
+//            return result;
+//        } catch (SQLException e) {
+//            throw new RuntimeException(e);
+//        }
     }
 
     private boolean isAuthSuperuser(AuthInfo auth) {
@@ -934,7 +996,6 @@ public class VideoServiceImpl implements VideoService {
                 conn.commit();
                 return rowsAffected > 0;
             } catch (SQLException e) {
-                // todo Rollback
                 conn.rollback();
                 throw new RuntimeException(e);
             }
@@ -998,7 +1059,6 @@ public class VideoServiceImpl implements VideoService {
      * </ul>
      * If any of the corner case happened, {@code false} shall be returned.
      */
-    // todo [AuthInfo mid=241679003, password=null, qq=07137359674, wechat=null),BV1U94y1d71R]: expected true, got false
     /*
 Wrong answer for [AuthInfo(mid=875505, password=null, qq=214328647, wechat=null), BV1ef4y1R71D]: expected false, got true
 Wrong answer for [AuthInfo(mid=217304, password=kCcdfog(oo, qq=null, wechat=null), BV1mG4y1z761]: expected false, got true
@@ -1011,6 +1071,14 @@ Wrong answer for [AuthInfo(mid=1804386, password=%OTlEZMEvK+FN*, qq=null, wechat
         if (!isVideoReviewed(bv) && !isAuthSuperuser(auth)) return false;
         if (isMatchMidBv(auth, bv)) return false;
         if (isLikedVideo(auth.getMid(), bv)) {
+            String updateVideo = "UPDATE video SET likes = likes - 1 WHERE bv = ?";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(updateVideo)) {
+                stmt.setString(1, bv);
+                stmt.executeUpdate();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
             String deleteLikes = "delete from thumbs_up where user_mid=? and video_bv=?\n";
             try (Connection conn = dataSource.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(deleteLikes)) {

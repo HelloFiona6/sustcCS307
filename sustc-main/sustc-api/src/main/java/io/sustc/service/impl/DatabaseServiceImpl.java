@@ -49,23 +49,23 @@ public class DatabaseServiceImpl implements DatabaseService {
              Statement stmt = conn.createStatement();
         ) {
             conn.setAutoCommit(false);
-            stmt.addBatch("ALTER TABLE follow DROP CONSTRAINT follow_follower_mid_fkey");
-            stmt.addBatch("ALTER TABLE follow DROP CONSTRAINT follow_following_mid_fkey");
-            stmt.addBatch("ALTER TABLE video DROP CONSTRAINT video_owner_mid_fkey");
-            stmt.addBatch("ALTER TABLE thumbs_up DROP CONSTRAINT thumbs_up_user_mid_fkey");
-            stmt.addBatch("ALTER TABLE thumbs_up DROP CONSTRAINT thumbs_up_video_bv_fkey");
-            stmt.addBatch("ALTER TABLE coin DROP CONSTRAINT coin_user_mid_fkey");
-            stmt.addBatch("ALTER TABLE coin DROP CONSTRAINT coin_video_bv_fkey");
-            stmt.addBatch("ALTER TABLE favorite DROP CONSTRAINT favorite_user_mid_fkey");
-            stmt.addBatch("ALTER TABLE favorite DROP CONSTRAINT favorite_video_bv_fkey");
-            stmt.addBatch("ALTER TABLE view DROP CONSTRAINT view_user_mid_fkey");
-            stmt.addBatch("ALTER TABLE view DROP CONSTRAINT view_video_bv_fkey");
-            stmt.addBatch("ALTER TABLE danmu DROP CONSTRAINT danmu_bv_fkey");
-            stmt.addBatch("ALTER TABLE danmu DROP CONSTRAINT danmu_user_mid_fkey");
-            stmt.addBatch("ALTER TABLE danmulikeby DROP CONSTRAINT danmulikeby_danmu_id_fkey");
-            stmt.addBatch("ALTER TABLE danmulikeby DROP CONSTRAINT danmulikeby_mid_fkey");
-            stmt.executeBatch();
-            conn.commit();
+//            stmt.addBatch("ALTER TABLE follow DROP CONSTRAINT follow_follower_mid_fkey");
+//            stmt.addBatch("ALTER TABLE follow DROP CONSTRAINT follow_following_mid_fkey");
+//            stmt.addBatch("ALTER TABLE video DROP CONSTRAINT video_owner_mid_fkey");
+//            stmt.addBatch("ALTER TABLE thumbs_up DROP CONSTRAINT thumbs_up_user_mid_fkey");
+//            stmt.addBatch("ALTER TABLE thumbs_up DROP CONSTRAINT thumbs_up_video_bv_fkey");
+//            stmt.addBatch("ALTER TABLE coin DROP CONSTRAINT coin_user_mid_fkey");
+//            stmt.addBatch("ALTER TABLE coin DROP CONSTRAINT coin_video_bv_fkey");
+//            stmt.addBatch("ALTER TABLE favorite DROP CONSTRAINT favorite_user_mid_fkey");
+//            stmt.addBatch("ALTER TABLE favorite DROP CONSTRAINT favorite_video_bv_fkey");
+//            stmt.addBatch("ALTER TABLE view DROP CONSTRAINT view_user_mid_fkey");
+//            stmt.addBatch("ALTER TABLE view DROP CONSTRAINT view_video_bv_fkey");
+//            stmt.addBatch("ALTER TABLE danmu DROP CONSTRAINT danmu_bv_fkey");
+//            stmt.addBatch("ALTER TABLE danmu DROP CONSTRAINT danmu_user_mid_fkey");
+//            stmt.addBatch("ALTER TABLE danmulikeby DROP CONSTRAINT danmulikeby_danmu_id_fkey");
+//            stmt.addBatch("ALTER TABLE danmulikeby DROP CONSTRAINT danmulikeby_mid_fkey");
+//            stmt.executeBatch();
+//            conn.commit();
 
             Thread thread1 = new Thread(() -> importUsers(userRecords));
             Thread thread2 = new Thread(() -> importFollow(userRecords));
@@ -115,6 +115,25 @@ public class DatabaseServiceImpl implements DatabaseService {
             stmt.addBatch("ALTER TABLE danmu ADD CONSTRAINT danmu_user_mid_fkey FOREIGN KEY (user_mid) REFERENCES users(mid) ON DELETE CASCADE");
             stmt.addBatch("ALTER TABLE danmulikeby ADD CONSTRAINT danmulikeby_mid_fkey FOREIGN KEY (mid) REFERENCES users(mid) ON DELETE CASCADE");
             stmt.addBatch("ALTER TABLE danmulikeby ADD CONSTRAINT danmulikeby_danmu_id_fkey FOREIGN KEY (danmu_id) REFERENCES danmu(danmu_id) ON DELETE CASCADE");
+
+            stmt.addBatch("create index index_video_title on video (title);");
+            stmt.addBatch("create index index_video_public_time on video (public_time);");
+            stmt.addBatch("create index index_video_duration on video (duration);");
+            stmt.addBatch("create index index_video_bv on video (bv);");
+            stmt.addBatch("create index index_video_mid on video (owner_mid);");
+            stmt.addBatch("create index index_video_owner_name on video (owner_name);");
+
+            stmt.addBatch("create index index_users_name on users (name);");
+            stmt.addBatch("create index index_users_level on users (level);");
+            stmt.addBatch("create index index_users_password on users (password);");
+            stmt.addBatch("create index index_users_qq on users (qq);");
+            stmt.addBatch("create index index_users_mid on users (mid);");
+            stmt.addBatch("create index index_users_wechat on users (wechat);");
+
+            stmt.addBatch("create index index_danmu_time on danmu (time);");
+            stmt.addBatch("CREATE INDEX idx_danmu_BV ON Danmu (BV);");
+            stmt.addBatch("CREATE INDEX idx_danmu_user_mid ON Danmu (user_mid);");
+
             stmt.executeBatch();
             conn.commit();
         } catch (SQLException e) {
