@@ -20,77 +20,81 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public long register(RegisterUserReq req) {
-        if (req.getPassword() == null || req.getName() == null || req.getSex() == null) {
+        if (req.getPassword() == null || req.getPassword().isEmpty() || req.getName() == null || req.getName().isEmpty() || req.getSex() == null) {
             return -1L;
         }
-        int a = req.getBirthday().indexOf("月");
-        int b = req.getBirthday().indexOf("日");
-        if (a == -1 || b == -1 || a >= b) return -1;
-        String month = req.getBirthday().substring(0, a);
-        String day = req.getBirthday().substring(a + 1, b);
-        int Month = Integer.parseInt(month);
-        int Day = Integer.parseInt(day);
-        if (!(Month >= 1 && Month <= 12)) return -1;
-        int[][] arr = {
-                {1, 31},
-                {2, 29},
-                {3, 31},
-                {4, 30},
-                {5, 31},
-                {6, 30},
-                {7, 31},
-                {8, 31},
-                {9, 30},
-                {10, 31},
-                {11, 30},
-                {12, 31},
-        };
 
-        if (Day > arr[a - 1][1]) {
-            return -1;
+        if (req.getBirthday() != null && !req.getBirthday().isEmpty()) {
+            int a = req.getBirthday().indexOf("月");
+            int b = req.getBirthday().indexOf("日");
+            if (a == -1 || b == -1 || a >= b) return -1;
+            String month = req.getBirthday().substring(0, a);
+            String day = req.getBirthday().substring(a + 1, b);
+            int Month = Integer.parseInt(month);
+            int Day = Integer.parseInt(day);
+            if (!(Month >= 1 && Month <= 12)) return -1;
+            int[][] arr = {
+                    {1, 31},
+                    {2, 29},
+                    {3, 31},
+                    {4, 30},
+                    {5, 31},
+                    {6, 30},
+                    {7, 31},
+                    {8, 31},
+                    {9, 30},
+                    {10, 31},
+                    {11, 30},
+                    {12, 31},
+            };
+
+            if (Day > arr[Month - 1][1]) {
+                return -1;
+            }
         }
 
         if (req.getQq() != null) {
-            String sqlOfQQ = "select count(*) as count from users where QQ= " + req.getQq() + ";";
+            String sqlOfQQ = "select count(*) as count from users where QQ= ? ";
             int numberOfQQ = 0;
             try (Connection conn = dataSource.getConnection();
-                 PreparedStatement statement = conn.prepareStatement(sqlOfQQ);
-                 ResultSet resultSet = statement.executeQuery(sqlOfQQ)) {
-
+                 PreparedStatement stmt = conn.prepareStatement(sqlOfQQ)) {
+                stmt.setString(1, req.getQq());
+                ResultSet resultSet = stmt.executeQuery();
                 while (resultSet.next()) {
                     numberOfQQ = resultSet.getInt("count");
                 }
             } catch (SQLException e) {
-                throw new RuntimeException(e);
+                throw new RuntimeException();
             }
-            if (numberOfQQ != 0) return -1;
+            if (numberOfQQ > 0) return -1;
         }
 
         if (req.getWechat() != null) {
-            String sqlOfWechat = " select count(*) as count from users where wechet= " + req.getWechat() + ";";
+            String sqlOfWechat = " select count(*) as count from users where wechat= ?";
             int numberOfWechat = 0;
             try (Connection conn = dataSource.getConnection();
-                 Statement statement = conn.createStatement();
-                 ResultSet resultSet = statement.executeQuery(sqlOfWechat)) {
+                 PreparedStatement stmt = conn.prepareStatement(sqlOfWechat)) {
+                stmt.setString(1, req.getWechat());
+                ResultSet resultSet = stmt.executeQuery();
                 while (resultSet.next()) {
                     numberOfWechat = resultSet.getInt("count");
                 }
             } catch (SQLException e) {
-                throw new RuntimeException(e);
+                throw new RuntimeException();
             }
-            if (numberOfWechat != 0) return -1;
+            if (numberOfWechat > 0) return -1;
         }
 
         String sqlOfMaxMid = " select max(mid) as max from users";
         long MaxMid = 0L;
         try (Connection conn = dataSource.getConnection();
-             Statement statement = conn.createStatement();
-             ResultSet resultSet = statement.executeQuery(sqlOfMaxMid)) {
+             PreparedStatement statement = conn.prepareStatement(sqlOfMaxMid);
+             ResultSet resultSet = statement.executeQuery()) {
             while (resultSet.next()) {
-                MaxMid = resultSet.getInt("max");
+                MaxMid = resultSet.getLong("max");
             }
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException();
         }
         return MaxMid + 1;
     }
@@ -112,9 +116,8 @@ public class UserServiceImpl implements UserService {
             if (resultSet.next()) {
                 identityOfAuth = resultSet.getString("identity");
             }
-            stmt.executeUpdate();
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException();
         }
 
         String identity = "";
@@ -125,16 +128,18 @@ public class UserServiceImpl implements UserService {
             if (resultSet.next()) {
                 identity = resultSet.getString("identity");
             }
-            stmt.executeUpdate();
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException();
         }
 
 
-        if (identityOfAuth.equals("user") && auth.getMid() != mid) {
+        if (identityOfAuth.equals("USER") && identity.equals("SUPERUSER")) {
             return false;
         }
-        if (identityOfAuth.equals("superuser") && (identity.equals("superUser") && mid != auth.getMid())) {
+        if (identityOfAuth.equals("USER") && identity.equals("USER") && auth.getMid() != mid) {
+            return false;
+        }
+        if (identityOfAuth.equals("SUPERUSER") && identity.equals("SUPERUSER") && mid != auth.getMid()) {
             return false;
         }
 
@@ -144,7 +149,7 @@ public class UserServiceImpl implements UserService {
             stmt.setLong(1, mid);
             stmt.executeUpdate();
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException();
         }
 
         String sqlOfDeleteDanmu = "delete from danmu where user_mid = ? ";
@@ -153,7 +158,7 @@ public class UserServiceImpl implements UserService {
             stmt.setLong(1, mid);
             stmt.executeUpdate();
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException();
         }
 
         String sqlOfDeleteDanmulikeby = "delete from danmulikeby where mid = ? ";
@@ -162,7 +167,7 @@ public class UserServiceImpl implements UserService {
             stmt.setLong(1, mid);
             stmt.executeUpdate();
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException();
         }
 
         String sqlOfDeleteFavorite = "delete from favorite where user_mid = ? ";
@@ -171,17 +176,17 @@ public class UserServiceImpl implements UserService {
             stmt.setLong(1, mid);
             stmt.executeUpdate();
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException();
         }
 
-        String sqlOfDeleteFollow = "delete from coin where follower_mid = ? or following_mid = ? ";
+        String sqlOfDeleteFollow = "delete from follow where follower_mid = ? or following_mid = ? ";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sqlOfDeleteFollow)) {
             stmt.setLong(1, mid);
             stmt.setLong(2, mid);
             stmt.executeUpdate();
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException();
         }
 
         String sqlOfDeleteThumbs_up = "delete from thumbs_up where user_mid = ? ";
@@ -190,16 +195,7 @@ public class UserServiceImpl implements UserService {
             stmt.setLong(1, mid);
             stmt.executeUpdate();
         } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-
-        String sqlOfDeleteUser = "delete from user where mid = ? ";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sqlOfDeleteUser)) {
-            stmt.setLong(1, mid);
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException();
         }
 
         String sqlOfDeleteVideo = "delete from video where owner_mid = ? ";
@@ -208,7 +204,7 @@ public class UserServiceImpl implements UserService {
             stmt.setLong(1, mid);
             stmt.executeUpdate();
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException();
         }
 
         String sqlOfDeleteView = "delete from view where user_mid = ? ";
@@ -217,8 +213,18 @@ public class UserServiceImpl implements UserService {
             stmt.setLong(1, mid);
             stmt.executeUpdate();
         } catch (SQLException e) {
+            throw new RuntimeException();
+        }
+
+        String sqlOfDeleteUser = "delete from users where mid = ? ";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sqlOfDeleteUser)) {
+            stmt.setLong(1, mid);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+
         return true;
     }
 
@@ -227,16 +233,16 @@ public class UserServiceImpl implements UserService {
         // auth is invalid
         if (!validAuth(auth)) return false;
         if (auth.getMid() == followeeMid) return false;
-
         // followeeMid valid
-        String sqlOfNumberOfFolloweeMidMid = "select count(*) as count from users where mid = ? ";
+        String sqlOfNumberOfFolloweeMidMid = "select count(*) as cnt from users where mid = ? ";
         int numberOfFolloweeMid = 0;
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sqlOfNumberOfFolloweeMidMid)) {
+//            System.out.println(auth.getMid());
             stmt.setLong(1, followeeMid);
             ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
-                numberOfFolloweeMid = resultSet.getInt("count");
+                numberOfFolloweeMid = resultSet.getInt("cnt");
             }
         } catch (SQLException e) {
             throw new RuntimeException();
@@ -276,7 +282,7 @@ public class UserServiceImpl implements UserService {
                 stmt.setLong(2, followeeMid);
                 stmt.executeUpdate();
             } catch (SQLException e) {
-                e.printStackTrace();
+                throw new RuntimeException();
             }
             return true;
         }
@@ -284,8 +290,9 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserInfoResp getUserInfo(long mid) {
+        UserInfoResp userInfoResp = new UserInfoResp();
         //mid
-        String sqlOfNumberOfMid = "select count(*) as count from UserRecord where mid= ?";
+        String sqlOfNumberOfMid = "select count(*) as count from users where mid= ?";
         int numberOfMid = 0;
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sqlOfNumberOfMid)) {
@@ -294,50 +301,40 @@ public class UserServiceImpl implements UserService {
             if (resultSet.next()) {
                 numberOfMid = resultSet.getInt("count");
             }
-            resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
         if (numberOfMid != 1) return null;
 
-        //coin
-        String sqlOfNumberOfCoin = """
-                select count(owner_mid) from (
-                select *
-                from coin
-                         left join video on coin.video_bv = video.bv)a;""";
+        //mid
+        userInfoResp.setMid(mid);
 
-        int numberOfCoin = 0;
+        //coin
+        String sqlOfNumberOfCoin = "select coin from users where mid = ? ";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sqlOfNumberOfCoin)) {
+            stmt.setLong(1, userInfoResp.getMid());
             ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
-                numberOfCoin = resultSet.getInt("count");
+                userInfoResp.setCoin(resultSet.getInt("coin"));
             }
-            resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
 
         //following array
-        String sqlOfFollowing = """
-                select following_mid count from follow where follower_mid='?'
-                """;
+        String sqlOfFollowing = "select following_mid as mid from follow where follower_mid = ? ";
         ArrayList<Long> arrayListOfFollowing = new ArrayList<>();
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sqlOfFollowing)) {
             stmt.setLong(1, mid);
             ResultSet resultSet = stmt.executeQuery();
             while (resultSet.next()) {
-                arrayListOfFollowing.add(resultSet.getLong("count"));
+                long data = resultSet.getLong("mid");
+                arrayListOfFollowing.add(data);
+
             }
             resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -345,33 +342,31 @@ public class UserServiceImpl implements UserService {
         for (int i = 0; i < arrayListOfFollowing.size(); i++) {
             arrayOfFollowing[i] = arrayListOfFollowing.get(i);
         }
+        userInfoResp.setFollowing(arrayOfFollowing);
+
         //follower
-        String sqlOfFollower = """
-                select follower_mid as count from follow where following_mid='?'
-                """;
+        String sqlOfFollower = "select follower_mid as mid from follow where following_mid = ? ";
         ArrayList<Long> arrayListOfFollower = new ArrayList<>();
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sqlOfFollower)) {
             stmt.setLong(1, mid);
             ResultSet resultSet = stmt.executeQuery();
             while (resultSet.next()) {
-                arrayListOfFollower.add(resultSet.getLong("count"));
+                long data = resultSet.getLong("mid");
+                arrayListOfFollower.add(data);
             }
-            resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
         long[] arrayOfFollower = new long[arrayListOfFollower.size()];
-        for (int i = 0; i < arrayOfFollower.length; i++) {
-            arrayOfFollowing[i] = arrayListOfFollower.get(i);
+        for (int i = 0; i < arrayListOfFollower.size(); i++) {
+            arrayOfFollower[i] = arrayListOfFollower.get(i);
         }
+        userInfoResp.setFollower(arrayOfFollower);
+
 
         //watch
-        String sqlOfWatch = """
-                select video_bv as bv from view where user_mid = ?
-                """;
+        String sqlOfWatch = "select video_bv as bv from view where user_mid = ? ";
         ArrayList<String> arrayListOfWatch = new ArrayList<>();
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sqlOfWatch)) {
@@ -380,19 +375,18 @@ public class UserServiceImpl implements UserService {
             while (resultSet.next()) {
                 arrayListOfWatch.add(resultSet.getString("bv"));
             }
-            resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-        String[] arrayOfWatch = arrayListOfWatch.toArray(new String[0]);
+        String[] arrayOfWatch = new String[arrayListOfWatch.size()];
+        for (int i = 0; i < arrayListOfWatch.size(); i++) {
+            arrayOfWatch[i] = arrayListOfWatch.get(i);
+        }
+        userInfoResp.setWatched(arrayOfWatch);
 
 
         //like
-        String sqlOfLike = """
-                select video_bv as bv from thumbs_up where user_mid = ?
-                """;
+        String sqlOfLike = "select video_bv as bv from thumbs_up where user_mid = ? ";
         ArrayList<String> arrayListOfLike = new ArrayList<>();
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sqlOfLike)) {
@@ -401,18 +395,17 @@ public class UserServiceImpl implements UserService {
             while (resultSet.next()) {
                 arrayListOfLike.add(resultSet.getString("bv"));
             }
-            resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-        String[] arrayOfLike = arrayListOfLike.toArray(new String[0]);
+        String[] arrayOfLike = new String[arrayListOfLike.size()];
+        for (int i = 0; i < arrayOfLike.length; i++) {
+            arrayOfLike[i] = arrayListOfLike.get(i);
+        }
+        userInfoResp.setLiked(arrayOfLike);
 
         //collect
-        String sqlOfCollect = """
-                select video_bv as bv from favorite where user_mid='?'
-                """;
+        String sqlOfCollect = "select video_bv as bv from favorite where user_mid=?";
         ArrayList<String> arrayListOfCollect = new ArrayList<>();
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sqlOfCollect)) {
@@ -421,18 +414,17 @@ public class UserServiceImpl implements UserService {
             while (resultSet.next()) {
                 arrayListOfCollect.add(resultSet.getString("bv"));
             }
-            resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-        String[] arrayOfCollect = arrayListOfCollect.toArray(new String[0]);
+        String[] arrayOfCollect = new String[arrayListOfCollect.size()];
+        for (int i = 0; i < arrayOfCollect.length; i++) {
+            arrayOfCollect[i] = arrayListOfCollect.get(i);
+        }
+        userInfoResp.setCollected(arrayOfCollect);
 
         //post
-        String sqlOfPost = """
-                select video_bv as bv from video where user_mid='?'            
-                """;
+        String sqlOfPost = "select bv as bv from video where owner_mid=?";
         ArrayList<String> arrayListOfPost = new ArrayList<>();
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sqlOfPost)) {
@@ -441,16 +433,15 @@ public class UserServiceImpl implements UserService {
             while (resultSet.next()) {
                 arrayListOfPost.add(resultSet.getString("bv"));
             }
-            resultSet.close();
-            stmt.close();
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-        String[] arrayOfPost = arrayListOfPost.toArray(new String[0]);
-
-
-        return new UserInfoResp(mid, numberOfCoin, arrayOfFollowing, arrayOfFollower, arrayOfWatch, arrayOfLike, arrayOfCollect, arrayOfPost);
+        String[] arrayOfPost = new String[arrayListOfPost.size()];
+        for (int i = 0; i < arrayOfPost.length; i++) {
+            arrayOfPost[i] = arrayListOfPost.get(i);
+        }
+        userInfoResp.setPosted(arrayOfPost);
+        return userInfoResp;
     }
 
 
@@ -464,11 +455,8 @@ public class UserServiceImpl implements UserService {
             if (resultSet.next()) {
                 numberOfMid = resultSet.getInt("count");
             }
-//            resultSet.close();
-//            stmt.close();
-//            stmt.executeUpdate();
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException();
         }
         return numberOfMid == 1;
     }
@@ -511,10 +499,7 @@ public class UserServiceImpl implements UserService {
         return numberOfMid == 1;
     }
 
-    public boolean validAuth(AuthInfo auth) {
-//        if ((auth.getQq() == null || auth.getQq().isEmpty()) && (auth.getWechat() == null || auth.getWechat().isEmpty()) && (auth.getPassword() == null || auth.getPassword().isEmpty()))
-//            return false;
-        //valid of mid
+    private boolean validAuth(AuthInfo auth) {
         boolean validOfMid = false;
         boolean validOfQQ = false;
         boolean validOfWechat = false;
@@ -605,4 +590,5 @@ public class UserServiceImpl implements UserService {
         }
         return validOfMid || validOfQQ || validOfWechat;
     }
+
 }

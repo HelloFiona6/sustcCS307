@@ -25,51 +25,32 @@ public class DanmuServiceImpl implements DanmuService {
 
         if (content == null || content.isEmpty()) return -1;
 
-        String sqlOfPublic = "select public_time::timestamp as public_time from video where owner_mid = ?";
-        String current = "select current_timestamp";
-        Timestamp publicTime = null;
-        Timestamp currentTime = null;
+        String sqlOfTime = "select duration from video where bv = ? ";
+        double length = 0.0;
         try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sqlOfPublic)) {
-            stmt.setLong(1, auth.getMid());
-
-            ResultSet resultSet = stmt.executeQuery(sqlOfPublic);
+             PreparedStatement stmt = conn.prepareStatement(sqlOfTime)) {
+            stmt.setString(1, bv);
+            ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
-                publicTime = resultSet.getTimestamp("public_time");
+                length = resultSet.getDouble("duration");
             }
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+        if (time > length) return -1;
 
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(current)) {
-            ResultSet resultSet = stmt.executeQuery(current);
-            if (resultSet.next()) {
-                currentTime = resultSet.getTimestamp("public_time");
-            }
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+        if (!bvPublicTime(bv)) return -1;
 
-        assert publicTime != null;
-        if (publicTime.after(currentTime)) {
-            return -1;
-        }
-
-        String sqlOfWatch = "select count(*) as count from view where video_bv = ? and user_mid = ?";
+        String sqlOfWatch = "select count(*) as cnt from view where video_bv = ? and user_mid = ?";
         int numberOfWatch = 0;
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sqlOfWatch)) {
             stmt.setString(1, bv);
             stmt.setLong(2, auth.getMid());
-
-            ResultSet resultSet = stmt.executeQuery(sqlOfWatch);
+            ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
-                numberOfWatch = resultSet.getInt("count");
+                numberOfWatch = resultSet.getInt("cnt");
             }
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -91,6 +72,28 @@ public class DanmuServiceImpl implements DanmuService {
         return MaxID + 1;
     }
 
+    /**
+     * Display the danmus in a time range.
+     * Similar to bilibili's mechanism, user can choose to only display part of the danmus to have a better watching
+     * experience.
+     *
+     * @param bv        the video's bv
+     * @param timeStart the start time of the range
+     * @param timeEnd   the end time of the range
+     * @param filter    whether to remove the duplicated content,
+     *                  if {@code true}, only the earliest posted danmu with the same content shall be returned
+     * @return a list of danmus id, sorted by {@code time}
+     * @apiNote You may consider the following corner cases:
+     * <ul>
+     *   <li>cannot find a video corresponding to the {@code bv}</li>
+     *   <li>
+     *     {@code timeStart} and/or {@code timeEnd} is invalid ({@code timeStart} <= {@code timeEnd}
+     *     or any of them < 0 or > video duration)
+     *   </li>
+     * <li>the video is not published</li>
+     * </ul>
+     * If any of the corner case happened, {@code null} shall be returned.
+     */
     @Override
     public List<Long> displayDanmu(String bv, float timeStart, float timeEnd, boolean filter) {
         if (!existBv(bv)) return null;
@@ -101,11 +104,10 @@ public class DanmuServiceImpl implements DanmuService {
              PreparedStatement stmt = conn.prepareStatement(sqlOfDuration)) {
             stmt.setString(1, bv);
 
-            ResultSet resultSet = stmt.executeQuery(sqlOfDuration);
+            ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
                 duration = resultSet.getFloat("duration");
             }
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -114,57 +116,51 @@ public class DanmuServiceImpl implements DanmuService {
             return null;
         }
 
-        String sqlOfPublic = "select public_time::timestamp as public_time from video where bv = ?";
-        String current = "select current_timestamp";
-        Timestamp publicTime = null;
-        Timestamp currentTime = null;
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sqlOfPublic)) {
-            stmt.setString(1, bv);
-
-            ResultSet resultSet = stmt.executeQuery(sqlOfPublic);
-            if (resultSet.next()) {
-                publicTime = resultSet.getTimestamp("public_time");
-            }
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(current)) {
-            ResultSet resultSet = stmt.executeQuery(current);
-            if (resultSet.next()) {
-                currentTime = resultSet.getTimestamp("public_time");
-            }
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-
-        assert publicTime != null;
-        if (publicTime.after(currentTime)) {
-            return null;
-        }
+        if (!bvPublicTime(bv)) return null;
 
         //List
         List<Long> list = new ArrayList<>();
 
-        String sqlOfWatch = "select ? danmu_id as id from danmu where time between ? and ? order by post_time";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sqlOfWatch)) {
-            if (filter) stmt.setString(1, "distinct");
-            else stmt.setString(1, "");
-            stmt.setFloat(2, timeStart);
-            stmt.setFloat(3, timeEnd);
-
-            ResultSet resultSet = stmt.executeQuery(sqlOfWatch);
-            while (resultSet.next()) {
-                list.add(resultSet.getLong("id"));
+        String sqlOfWatch;
+        if (filter) {
+            sqlOfWatch = "select danmu_id as id from danmu where time between ? and ? order by post_time";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sqlOfWatch)) {
+                stmt.setFloat(1, timeStart);
+                stmt.setFloat(2, timeEnd);
+                ResultSet resultSet = stmt.executeQuery();
+                while (resultSet.next()) {
+                    list.add(resultSet.getLong("id"));
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
             }
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+        } else {
+            sqlOfWatch = """
+                    SELECT danmu_id AS id
+                    FROM (
+                        SELECT MIN(post_time) OVER (PARTITION BY content) AS min_time, danmu_id
+                        FROM (
+                            SELECT *
+                            FROM danmu
+                            WHERE BV = ? AND time BETWEEN ? AND ?
+                            ORDER BY post_time
+                        ) a
+                        ORDER BY min_time
+                    ) b
+                    """;
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sqlOfWatch)) {
+                stmt.setString(1, bv);
+                stmt.setFloat(2, timeStart);
+                stmt.setFloat(3, timeEnd);
+                ResultSet resultSet = stmt.executeQuery();
+                while (resultSet.next()) {
+                    list.add(resultSet.getLong("id"));
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
         }
         return list;
     }
@@ -172,33 +168,199 @@ public class DanmuServiceImpl implements DanmuService {
     @Override
     public boolean likeDanmu(AuthInfo auth, long id) {
         if (!validAuth(auth)) return false;
-        else return existDanmu(id);
-    }
+        if (!existDanmu(id)) return false;
 
-    public boolean validAuth(AuthInfo auth) {
-        // auth is invalid
-        String sqlOfWechatAndQQ = "select count(*) as count from users where Wechat= ? or QQ=?";
-        int numberOfMid = 0;
+//        if (isLikedVideo(auth.getMid(), bv)) {
+//            String deleteLikes = "delete from danmu where danmu_id = ? and user_mid=?";
+//            try (Connection conn = dataSource.getConnection();
+//                 PreparedStatement stmt = conn.prepareStatement(deleteLikes)) {
+//                stmt.setLong(1, id);
+//                stmt.setLong(2,auth.getMid());
+//                stmt.executeUpdate();
+//            } catch (SQLException e) {
+//                throw new RuntimeException(e);
+//            }
+//            return false;
+//        }else{
+//            String deleteLikes = "insert into danmu where danmu_id = ? and user_mid=?";
+//            try (Connection conn = dataSource.getConnection();
+//                 PreparedStatement stmt = conn.prepareStatement(deleteLikes)) {
+//                stmt.setLong(1, id);
+//                stmt.setLong(2,auth.getMid());
+//                stmt.executeUpdate();
+//            } catch (SQLException e) {
+//                throw new RuntimeException(e);
+//            }
+//            return false;
+//        }
+
+//        String updateVideo = "UPDATE video SET likes = likes + 1 WHERE bv = ?";
+//        try (Connection conn = dataSource.getConnection();
+//             PreparedStatement stmt = conn.prepareStatement(updateVideo)) {
+//            stmt.setString(1, bv);
+//            stmt.executeUpdate();
+//        } catch (SQLException e) {
+//            throw new RuntimeException(e);
+//        }
+//        // update the like in the thumbs_up table
+//        String insertLikes = "insert into thumbs_up (video_BV, user_mid) values (?,?)";
+//        try (Connection conn = dataSource.getConnection();
+//             PreparedStatement stmt = conn.prepareStatement(insertLikes)) {
+//
+//            stmt.setString(1, bv);
+//            stmt.setLong(2, auth.getMid());
+//
+//            int rowsAffected = stmt.executeUpdate();
+//            return rowsAffected > 0;
+//        } catch (SQLException e) {
+//            throw new RuntimeException(e);
+//        }
+
+        String sqlOfMaxID = " select max(danamu_id) as max from danmu";
+        long MaxMid = 0L;
         try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sqlOfWechatAndQQ)) {
-            stmt.setString(1, auth.getWechat());
-            stmt.setString(2, auth.getQq());
-            ResultSet resultSet = stmt.executeQuery(sqlOfWechatAndQQ);
-            if (resultSet.next()) {
-                numberOfMid = resultSet.getInt("count");
+             PreparedStatement statement = conn.prepareStatement(sqlOfMaxID);
+             ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                MaxMid = resultSet.getLong("max");
             }
-            stmt.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException();
+        }
+
+
+
+        int cnt = 0;
+        String searchDanmu = "select count(*) as cnt from danmulikeby where danmu_id = ? and mid = ? ";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(searchDanmu)) {
+            stmt.setLong(1, id);
+            stmt.setLong(2, auth.getMid());
+            ResultSet resultSet = stmt.executeQuery();
+            while (resultSet.next()) {
+                cnt = resultSet.getInt(1);
+            }
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-        if (auth.getWechat() != null && auth.getQq() != null) {
-            return numberOfMid != 1;
-        }
 
-        if (!existMid(auth.getMid()) && (auth.getQq() == null || !existQQ(auth.getQq())) && (auth.getWechat() == null || !existWechat(auth.getWechat()))) {
+        if (cnt == 1) {
+            String deleteDanmu = "delete from danmulikeby where danmu_id = ? and mid = ? ";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(deleteDanmu)) {
+                stmt.setLong(1, id);
+                stmt.setLong(2, auth.getMid());
+                stmt.executeUpdate();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            return false;
+        } else {
+            String insertVideo = "INSERT INTO danmulikeby values (?,?) ";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(insertVideo)) {
+                stmt.setLong(1, id);
+                stmt.setLong(2, auth.getMid());
+                stmt.executeUpdate();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
             return true;
         }
-        return false;
+    }
+
+    public boolean validAuth(AuthInfo auth) {
+        //valid of mid
+        boolean validOfMid = false;
+        boolean validOfQQ = false;
+        boolean validOfWechat = false;
+        int numberOfMid = 0;
+        int numberOfQQ = 0;
+        int numberOfWechat = 0;
+        if (auth.getPassword() != null) {
+            String sqlOfValidOfMid = "select count(*) as count from users where mid= ? and password = ?";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sqlOfValidOfMid)) {
+                stmt.setLong(1, auth.getMid());
+                stmt.setString(2, auth.getPassword());
+                ResultSet resultSet = stmt.executeQuery();
+                if (resultSet.next()) {
+                    numberOfMid = resultSet.getInt("count");
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            validOfMid = numberOfMid == 1;
+            if (numberOfMid != 1) return false;
+        }
+        //QQ is valid
+        if (auth.getQq() != null) {
+            String sqlOfQQ = "select count(*) as count from users where QQ = ? ";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sqlOfQQ)) {
+                stmt.setString(1, auth.getQq());
+                ResultSet resultSet = stmt.executeQuery();
+                if (resultSet.next()) {
+                    numberOfQQ = resultSet.getInt("count");
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            validOfQQ = numberOfQQ == 1;
+
+            if (validOfQQ) {
+                String sqlOfMid = "select mid as mid from users where QQ = ?";
+                try (Connection conn = dataSource.getConnection();
+                     PreparedStatement stmt = conn.prepareStatement(sqlOfMid)) {
+                    stmt.setString(1, auth.getQq());
+                    ResultSet resultSet = stmt.executeQuery();
+                    if (resultSet.next()) {
+                        long result = resultSet.getLong("mid");
+                        if (auth.getMid() == 0) auth.setMid(result);
+                        else {
+                            if (auth.getMid() != result) return false;
+                        }
+                    }
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
+
+        //wechat is valid
+        if (auth.getWechat() != null) {
+            String sqlOfWechat = "select count(*) as count from users where Wechat = ? ";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sqlOfWechat)) {
+                stmt.setString(1, auth.getWechat());
+                ResultSet resultSet = stmt.executeQuery();
+                if (resultSet.next()) {
+                    numberOfWechat = resultSet.getInt("count");
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            validOfWechat = numberOfWechat == 1;
+
+            if (validOfWechat) {
+                String sqlOfMid = "select mid as mid from users where wechat = ?";
+                try (Connection conn = dataSource.getConnection();
+                     PreparedStatement stmt = conn.prepareStatement(sqlOfMid)) {
+                    stmt.setString(1, auth.getWechat());
+                    ResultSet resultSet = stmt.executeQuery();
+                    if (resultSet.next()) {
+                        long result = resultSet.getLong("mid");
+                        if (auth.getMid() == 0) auth.setMid(result);
+                        else {
+                            if (auth.getMid() != result) return false;
+                        }
+                    }
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
+        return validOfMid || validOfQQ || validOfWechat;
     }
 
     public boolean existMid(long mid) {
@@ -259,21 +421,19 @@ public class DanmuServiceImpl implements DanmuService {
     }
 
     public boolean existBv(String bv) {
-        String sqlOfBv = "select count(*) as count from video where bv = ?";
+        String sqlOfBv = "select count(*) as cnt from video where bv = ?";
         int numberOfBv = 0;
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sqlOfBv)) {
             stmt.setString(1, bv);
-
-            ResultSet resultSet = stmt.executeQuery(sqlOfBv);
+            ResultSet resultSet = stmt.executeQuery();
             if (resultSet.next()) {
-                numberOfBv = resultSet.getInt("count");
+                numberOfBv = resultSet.getInt("cnt");
             }
-            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-        return numberOfBv == 1;
+        return numberOfBv > 0;
     }
 
     public boolean existDanmu(long id) {
@@ -292,5 +452,34 @@ public class DanmuServiceImpl implements DanmuService {
             throw new RuntimeException(e);
         }
         return numberOfBv == 1;
+    }
+
+    public boolean bvPublicTime(String bv) {
+        String sqlOfPublic = "select public_time::text as public_time_ from video where bv = ?";
+        String current = "select current_timestamp::text as current_time_";
+        String publicTime = "";
+        String currentTime = "";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sqlOfPublic)) {
+            stmt.setString(1, bv);
+            ResultSet resultSet = stmt.executeQuery();
+            if (resultSet.next()) {
+                publicTime = resultSet.getString("public_time_");
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(current)) {
+            ResultSet resultSet = stmt.executeQuery();
+            if (resultSet.next()) {
+                currentTime = resultSet.getString("current_time_");
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+
+        return publicTime.compareTo(currentTime) < 0;
     }
 }
