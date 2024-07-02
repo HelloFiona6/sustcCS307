@@ -2,10 +2,7 @@ package io.sustc.dto;
 
 import java.io.Serializable;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 /**
  * The authorization information class
@@ -14,6 +11,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString
 public class AuthInfo implements Serializable {
 
     /**
@@ -35,4 +33,5 @@ public class AuthInfo implements Serializable {
      * OIDC login by WeChat, does not require a password.
      */
     private String wechat;
+
 }

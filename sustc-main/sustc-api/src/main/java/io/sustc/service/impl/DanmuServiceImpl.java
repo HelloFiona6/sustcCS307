@@ -58,7 +58,7 @@ public class DanmuServiceImpl implements DanmuService {
         if (numberOfWatch != 1) return -1;
 
 
-        String sqlOfMaxMid = " select max(danmu_id) as max from danmu";
+        String sqlOfMaxMid = "select max(danmu_id) as max from danmu";
         long MaxID = 0L;
         try (Connection conn = dataSource.getConnection();
              Statement statement = conn.createStatement();
@@ -165,34 +165,79 @@ public class DanmuServiceImpl implements DanmuService {
         return list;
     }
 
+    /**
+     * Likes a danmu.
+     * If the user already liked the danmu, this operation will cancel the like status.
+     * It is mandatory that the user shall watch the video first before he/she can like a danmu of it.
+     *
+     * @param auth the current user's authentication information
+     * @param id   the danmu's id
+     * @return the like state of the user to this danmu after this operation
+     * @apiNote You may consider the following corner cases:
+     * <ul>
+     *   <li>{@code auth} is invalid, as stated in {@link io.sustc.service.UserService#deleteAccount(AuthInfo, long)}</li>
+     *   <li>cannot find a danmu corresponding to the {@code id}</li>
+     * </ul>
+     * If any of the corner case happened, {@code false} shall be returned.
+     */
     @Override
     public boolean likeDanmu(AuthInfo auth, long id) {
         if (!validAuth(auth)) return false;
         if (!existDanmu(id)) return false;
 
-//        if (isLikedVideo(auth.getMid(), bv)) {
-//            String deleteLikes = "delete from danmu where danmu_id = ? and user_mid=?";
-//            try (Connection conn = dataSource.getConnection();
-//                 PreparedStatement stmt = conn.prepareStatement(deleteLikes)) {
-//                stmt.setLong(1, id);
-//                stmt.setLong(2,auth.getMid());
-//                stmt.executeUpdate();
-//            } catch (SQLException e) {
-//                throw new RuntimeException(e);
-//            }
-//            return false;
-//        }else{
-//            String deleteLikes = "insert into danmu where danmu_id = ? and user_mid=?";
-//            try (Connection conn = dataSource.getConnection();
-//                 PreparedStatement stmt = conn.prepareStatement(deleteLikes)) {
-//                stmt.setLong(1, id);
-//                stmt.setLong(2,auth.getMid());
-//                stmt.executeUpdate();
-//            } catch (SQLException e) {
-//                throw new RuntimeException(e);
-//            }
-//            return false;
-//        }
+        boolean like =false;
+        String findLikes = "select count(*) from danmulikeby where danmu_id = ? and mid=?";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(findLikes)) {
+                stmt.setLong(1, id);
+                stmt.setLong(2,auth.getMid());
+                ResultSet resultSet = stmt.executeQuery();
+                while (resultSet.next()) {
+                    like=resultSet.getInt(1)==1;
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        if(like){
+            String deleteLikes = "delete from danmulikeby where danmu_id = ? and id=?";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(deleteLikes)) {
+                stmt.setLong(1, id);
+                stmt.setLong(2,auth.getMid());
+                stmt.executeUpdate();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }else{
+            String deleteLikes = "insert into danmulikeby values (? ,?) ";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(deleteLikes)) {
+                stmt.setLong(1, id);
+                stmt.setLong(2,auth.getMid());
+                stmt.executeUpdate();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        //            String deleteLikes = "delete from danmulikeby where danmu_id = ? and id=?";
+        //            try (Connection conn = dataSource.getConnection();
+        //                 PreparedStatement stmt = conn.prepareStatement(deleteLikes)) {
+        //                stmt.setLong(1, id);
+        //                stmt.setLong(2,auth.getMid());
+        //                stmt.executeUpdate();
+        //            } catch (SQLException e) {
+        //                throw new RuntimeException(e);
+        //            }
+        //            String deleteLikes = "insert into danmulikeby values (? ,?) ";
+        //            try (Connection conn = dataSource.getConnection();
+        //                 PreparedStatement stmt = conn.prepareStatement(deleteLikes)) {
+        //                stmt.setLong(1, id);
+        //                stmt.setLong(2,auth.getMid());
+        //                stmt.executeUpdate();
+        //            } catch (SQLException e) {
+        //                throw new RuntimeException(e);
+        //            }
+        return !like;
 
 //        String updateVideo = "UPDATE video SET likes = likes + 1 WHERE bv = ?";
 //        try (Connection conn = dataSource.getConnection();
@@ -215,58 +260,58 @@ public class DanmuServiceImpl implements DanmuService {
 //        } catch (SQLException e) {
 //            throw new RuntimeException(e);
 //        }
+//
+//        String sqlOfMaxID = " select max(danamu_id) as max from danmu";
+//        long MaxMid = 0L;
+//        try (Connection conn = dataSource.getConnection();
+//             PreparedStatement statement = conn.prepareStatement(sqlOfMaxID);
+//             ResultSet resultSet = statement.executeQuery()) {
+//            while (resultSet.next()) {
+//                MaxMid = resultSet.getLong("max");
+//            }
+//        } catch (SQLException e) {
+//            throw new RuntimeException();
+//        }
 
-        String sqlOfMaxID = " select max(danamu_id) as max from danmu";
-        long MaxMid = 0L;
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement statement = conn.prepareStatement(sqlOfMaxID);
-             ResultSet resultSet = statement.executeQuery()) {
-            while (resultSet.next()) {
-                MaxMid = resultSet.getLong("max");
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException();
-        }
 
 
-
-        int cnt = 0;
-        String searchDanmu = "select count(*) as cnt from danmulikeby where danmu_id = ? and mid = ? ";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(searchDanmu)) {
-            stmt.setLong(1, id);
-            stmt.setLong(2, auth.getMid());
-            ResultSet resultSet = stmt.executeQuery();
-            while (resultSet.next()) {
-                cnt = resultSet.getInt(1);
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-
-        if (cnt == 1) {
-            String deleteDanmu = "delete from danmulikeby where danmu_id = ? and mid = ? ";
-            try (Connection conn = dataSource.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(deleteDanmu)) {
-                stmt.setLong(1, id);
-                stmt.setLong(2, auth.getMid());
-                stmt.executeUpdate();
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
-            return false;
-        } else {
-            String insertVideo = "INSERT INTO danmulikeby values (?,?) ";
-            try (Connection conn = dataSource.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(insertVideo)) {
-                stmt.setLong(1, id);
-                stmt.setLong(2, auth.getMid());
-                stmt.executeUpdate();
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
-            return true;
-        }
+//        int cnt = 0;
+//        String searchDanmu = "select count(*) as cnt from danmulikeby where danmu_id = ? and mid = ? ";
+//        try (Connection conn = dataSource.getConnection();
+//             PreparedStatement stmt = conn.prepareStatement(searchDanmu)) {
+//            stmt.setLong(1, id);
+//            stmt.setLong(2, auth.getMid());
+//            ResultSet resultSet = stmt.executeQuery();
+//            while (resultSet.next()) {
+//                cnt = resultSet.getInt(1);
+//            }
+//        } catch (SQLException e) {
+//            throw new RuntimeException(e);
+//        }
+//
+//        if (cnt == 1) {
+//            String deleteDanmu = "delete from danmulikeby where danmu_id = ? and mid = ? ";
+//            try (Connection conn = dataSource.getConnection();
+//                 PreparedStatement stmt = conn.prepareStatement(deleteDanmu)) {
+//                stmt.setLong(1, id);
+//                stmt.setLong(2, auth.getMid());
+//                stmt.executeUpdate();
+//            } catch (SQLException e) {
+//                throw new RuntimeException(e);
+//            }
+//            return false;
+//        } else {
+//            String insertVideo = "INSERT INTO danmulikeby values (?,?) ";
+//            try (Connection conn = dataSource.getConnection();
+//                 PreparedStatement stmt = conn.prepareStatement(insertVideo)) {
+//                stmt.setLong(1, id);
+//                stmt.setLong(2, auth.getMid());
+//                stmt.executeUpdate();
+//            } catch (SQLException e) {
+//                throw new RuntimeException(e);
+//            }
+//            return true;
+//        }
     }
 
     public boolean validAuth(AuthInfo auth) {

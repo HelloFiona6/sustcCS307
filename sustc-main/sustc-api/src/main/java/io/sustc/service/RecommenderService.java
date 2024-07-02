@@ -79,7 +79,6 @@ public interface RecommenderService {
      * If any of the corner case happened, {@code null} shall be returned.
      */
     List<String> recommendVideosForUser(AuthInfo auth, int pageSize, int pageNum);
-
     /**
      * Recommends friends for a user, based on their common followings.
      * Find all users that are not currently followed by the user, and have at least one common following with the user.

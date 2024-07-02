@@ -245,6 +245,8 @@ public class RecommenderServiceImpl implements RecommenderService {
 //        for (int i = 0; i < Math.min(temp.size(), pageNum * pageSize); i++) {
 //            result.add(temp.get(i).bv);
 //        }
+
+
         ArrayList<String> arrayList = new ArrayList<>();
         String sql = "select * from general_recommendations( ?,? )";
         try (Connection conn = dataSource.getConnection();
@@ -268,17 +270,36 @@ public class RecommenderServiceImpl implements RecommenderService {
         if (!validAuth(auth)) return null;
         if (pageSize <= 0 || pageNum <= 0) return null;
         List<String> arrayList = new ArrayList<>();
-        String sql = "select * from recommend_videos_for_user( ? , ? , ? )";
+//        String sql = "select * from recommend_videos_for_user( ? , ? , ? )";
+        String sql = """
+                WITH UserInterests AS (
+                                         SELECT DISTINCT uf2.follower_mid AS friend_id
+                                        FROM follow uf
+                                        JOIN follow uf2 ON uf.following_mid = uf2.follower_mid AND uf.follower_mid = uf2.following_mid
+                                        WHERE uf.follower_mid =?
+                                            )
+                                        SELECT distinct v.video_bv,(SELECT COUNT(DISTINCT vf.user_mid) FROM View vf WHERE vf.video_bv = v.video_bv
+                                                and vf.user_mid in (select g.friend_id from UserInterests g )),
+                                        (select public_time from video t where v.video_bv=t.bv) FROM View v
+                                            JOIN UserInterests ui ON v.user_mid = ui.friend_id
+                                                WHERE NOT EXISTS(    SELECT 1 FROM View s
+                                                     WHERE s.user_mid =? AND s.video_bv = v.video_bv)
+                                                     ORDER BY
+                                                  (SELECT COUNT(DISTINCT vf.user_mid) FROM View vf WHERE vf.video_bv = v.video_bv
+                                                and vf.user_mid in (select g.friend_id from UserInterests g )) DESC,
+                                            (select public_time from video t where v.video_bv=t.bv) DESC limit ? offset (? - 1) * ?;
+                """;
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setLong(1, auth.getMid());
-            stmt.setLong(2, pageSize);
-            stmt.setLong(3, pageNum);
+            stmt.setLong(2, auth.getMid());
+            stmt.setLong(3, pageSize);
+            stmt.setLong(4, pageNum);
+            stmt.setLong(5, pageSize);
             ResultSet resultSet = stmt.executeQuery();
             while (resultSet.next()) {
-                Array array = resultSet.getArray(1);
-                String[] values = (String[]) array.getArray();
-                arrayList = new ArrayList<>(Arrays.asList(values));
+                String s = resultSet.getString(1);
+                arrayList.add(s);
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -291,53 +312,36 @@ public class RecommenderServiceImpl implements RecommenderService {
         if (!validAuth(auth)) return null;
         if (pageSize <= 0 || pageNum <= 0) return null;
         ArrayList<Long> arrayList = new ArrayList<>();
-        String sql = "select * from Recommend_Friends( ? , ? , ?)";
+//        String sql = "select * from Recommend_Friends( ? , ? , ?)";
+        String sql = """
+                SELECT ss.mid,ss.level, COUNT(u1.following_mid) AS common_followings
+                            FROM users ss
+                             JOIN follow u ON ss.mid = u.following_mid
+                                JOIN follow u1 ON u1.follower_mid = u.follower_mid
+                                WHERE u1.following_mid =?  and ss.mid<> ?
+                                and ss.mid not in (  SELECT u2.follower_mid
+                                  FROM follow u2
+                                  WHERE u2.following_mid =?
+                               )
+                                GROUP BY ss.mid, ss.level
+                order by common_followings desc ,ss.level desc , ss.mid asc limit ? offset (? - 1) * ?
+                """;
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setLong(1, auth.getMid());
-            stmt.setLong(2, pageSize);
-            stmt.setLong(3, pageNum);
+            stmt.setLong(2, auth.getMid());
+            stmt.setLong(3, auth.getMid());
+            stmt.setLong(4, pageSize);
+            stmt.setLong(5, pageNum);
+            stmt.setLong(6, pageSize);
             ResultSet resultSet = stmt.executeQuery();
             while (resultSet.next()) {
-                Array array = resultSet.getArray(1);
-                Long[] values = (Long[]) array.getArray();
-                arrayList = new ArrayList<>(Arrays.asList(values));
+                arrayList.add(resultSet.getLong(1));
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
         return arrayList;
-    }
-
-    private static class node implements Comparable<node> {
-        String bv;
-        int val;
-        double sum;
-
-        public node(String bv, int val) {
-            this.bv = bv;
-            this.val = val;
-        }
-
-        @Override
-        public int compareTo(node other) {
-            return other.val - this.val;
-        }
-    }
-
-    private static class Node implements Comparable<Node> {
-        String bv;
-        double sum;
-
-        public Node(String bv, double sum) {
-            this.bv = bv;
-            this.sum = sum;
-        }
-
-        @Override
-        public int compareTo(Node other) {
-            return Double.compare(other.sum, this.sum);
-        }
     }
 
     private boolean validAuth(AuthInfo auth) {
